@@ -752,7 +752,7 @@ app.get('/api/eventos/:id/estatisticas', async (req, res) => {
     }
 });
 
-const PORT = 3000;
+const PORT = process.env.DB_PORT;
 app.listen(PORT, () => {
     console.log(`Servidor rodando na porta ${PORT}`);
 });
