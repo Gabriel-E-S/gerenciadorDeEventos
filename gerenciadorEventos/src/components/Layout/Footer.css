@@ -1,0 +1,30 @@
+.footer {
+  background-color: var(--primary-blue);
+  text-align: center;
+  padding: 1.5rem 1.5rem; 
+}
+
+.footer h2 {
+  color: var(--white);
+  font-size: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.btn-comecar {
+  background-color: var(--white);
+  color: var(--primary-blue);
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  border: none;
+  border-radius: var(--radius-md); 
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block; 
+  transition: var(--transition-fast); 
+}
+
+.btn-comecar:hover {
+  background-color: var(--dark-blue);
+  color: var(--white);
+}

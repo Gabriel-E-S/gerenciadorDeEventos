@@ -1,0 +1,101 @@
+.contato-container {
+  padding: 4rem 2rem;
+  background-color: var(--bg-main); 
+  min-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.contato-container h1 {
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.contato-subtitulo {
+  margin-bottom: 3rem;
+  color: var(--text-gray);
+}
+
+.contato-card {
+  background-color: var(--bg-card);
+  padding: 2.5rem;
+  border-radius: var(--radius-lg); 
+  box-shadow: var(--shadow-md); 
+  width: 100%;
+  max-width: 800px;
+}
+
+.contato-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.form-group label {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text-main);
+}
+
+.form-group label span {
+  color: var(--danger-red); 
+}
+
+.form-group input, .form-group textarea {
+  padding: 0.8rem;
+  border: 1px solid var(--border-color); 
+  border-radius: var(--radius-md); 
+  font-family: inherit;
+  outline: none;
+  background-color: var(--bg-card);
+  color: var(--text-main);
+  transition: var(--transition-fast);
+}
+
+.form-group input:focus, .form-group textarea:focus {
+  border-color: var(--primary-blue);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); 
+}
+
+.btn-enviar {
+  background-color: var(--dark-blue);
+  color: var(--white);
+  border: none;
+  padding: 0.8rem 2rem;
+  border-radius: var(--radius-md); 
+  font-weight: 600;
+  cursor: pointer;
+  align-self: flex-end;
+  transition: var(--transition-fast); 
+}
+
+.btn-enviar:hover {
+  background-color: var(--primary-blue);
+}
+
+.msg-sucesso {
+  color: var(--secondary-green);
+  margin-top: 15px;
+  font-weight: bold;
+}
+
+.msg-erro {
+  color: var(--danger-red);
+  margin-top: 15px;
+  font-weight: bold;
+}
+
+@media (min-width: 768px) {
+  .form-row {
+    display: flex;
+    gap: 1.5rem;
+  }
+}

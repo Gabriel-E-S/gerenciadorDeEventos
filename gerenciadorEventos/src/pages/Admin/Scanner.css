@@ -1,0 +1,103 @@
+.scanner-container {
+  padding: 3rem 1.5rem;
+  background-color: var(--bg-main);
+  min-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.scanner-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.scanner-header h1 {
+  font-size: 2rem;
+  color: var(--dark-blue);
+  margin-bottom: 0.5rem;
+}
+
+.scanner-header p {
+  color: var(--text-gray);
+}
+
+.leitor-wrapper {
+  background-color: var(--bg-card);
+  padding: 1.5rem;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  width: 100%;
+  max-width: 500px;
+  position: relative;
+}
+
+#reader {
+  border: none !important;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+#reader button {
+  background-color: var(--primary-blue);
+  color: var(--white);
+  border: none;
+  padding: 0.6rem 1.2rem;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  cursor: pointer;
+  margin: 10px 5px;
+  transition: var(--transition-fast);
+}
+
+#reader button:hover {
+  background-color: var(--primary-blue-hover);
+}
+
+#reader a {
+  color: var(--primary-blue);
+  text-decoration: none;
+}
+
+.resultado-alerta {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: var(--secondary-green); 
+  color: var(--white);
+  padding: 2rem;
+  border-radius: var(--radius-lg);
+  width: 90%;
+  text-align: center;
+  box-shadow: var(--shadow-md); 
+  animation: popIn 0.3s ease-out forwards;
+  z-index: 10;
+}
+
+.resultado-alerta.erro-scan {
+  background-color: var(--danger-red);
+}
+
+.resultado-alerta h2 {
+  color: var(--white);
+  margin-bottom: 1rem;
+}
+
+.resultado-dados {
+  background-color: rgba(255, 255, 255, 0.1);
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  text-align: left;
+}
+
+.token-miniatura {
+  font-size: 0.8rem;
+  opacity: 0.8;
+  margin-top: 0.5rem;
+}
+
+@keyframes popIn {
+  from { opacity: 0; transform: translate(-50%, -40%) scale(0.9); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}

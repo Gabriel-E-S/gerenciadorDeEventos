@@ -1,0 +1,251 @@
+.eventos-page {
+  padding: 4rem 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.eventos-header {
+  margin-bottom: 2rem;
+}
+
+.eventos-header h1 {
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
+  color: var(--dark-blue); 
+}
+
+.btn-situacao {
+  background-color: transparent;
+  border: 2px solid var(--text-gray);
+  padding: 0.5rem 1.5rem;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.eventos-grid-page {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2rem;
+}
+
+.evento-card-page {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  transition: var(--transition-fast); 
+}
+
+.evento-card-page:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-4px); 
+}
+
+.card-banner {
+  background-color: var(--light-cyan); 
+  padding: 1.5rem;
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.card-banner p {
+  color: var(--dark-blue);
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.card-body {
+  padding: 1.5rem;
+  flex-grow: 1;
+}
+
+.card-body h3 {
+  font-size: 1.2rem;
+  margin-bottom: 1rem;
+  color: var(--dark-blue);
+}
+
+.card-body p {
+  font-size: 0.9rem;
+  margin-bottom: 0.4rem;
+  color: var(--text-gray);
+}
+
+.card-footer {
+  padding: 1.5rem;
+  padding-top: 0;
+}
+
+.btn-detalhes, .btn-gerenciar {
+  width: 100%;
+  padding: 0.8rem;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: var(--transition-fast);
+}
+
+.btn-detalhes {
+  background-color: var(--primary-blue); 
+  color: var(--white);
+}
+
+.btn-detalhes:hover {
+  background-color: var(--primary-blue-hover);
+}
+
+.btn-gerenciar {
+  background-color: var(--text-gray); 
+  color: var(--white);
+}
+
+.btn-gerenciar:hover {
+  background-color: var(--text-main);
+}
+
+.btn-voltar {
+  background: none;
+  border: none;
+  color: var(--text-gray);
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 1.5rem;
+  padding: 0;
+  font-size: 1rem;
+  transition: var(--transition-fast);
+}
+
+.btn-voltar:hover {
+  color: var(--primary-blue);
+  text-decoration: underline;
+}
+
+.detalhes-banner {
+  background-color: var(--light-cyan); 
+  padding: 2.5rem;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  margin-bottom: 3rem;
+  text-align: center;
+}
+
+.detalhes-banner h1 {
+  font-size: 2rem;
+  color: var(--text-main);
+  margin-bottom: 0.5rem;
+}
+
+.detalhes-local {
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.detalhes-descricao {
+  color: var(--text-gray);
+  line-height: 1.6;
+}
+
+.atividades-lista h2 {
+  font-size: 1.5rem;
+  color: var(--text-main);
+  margin-bottom: 1.5rem;
+}
+
+.vagas-container {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--border-color);
+}
+
+.filtro-select {
+  padding: 0.5rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  outline: none;
+  background-color: var(--bg-card); 
+  color: var(--text-main);
+  cursor: pointer;
+  font-family: inherit;
+  transition: var(--transition-fast);
+}
+
+.filtro-select:focus {
+  border-color: var(--primary-blue);
+}
+
+.carregando-texto {
+  text-align: center;
+  margin-top: 3rem;
+  color: var(--text-muted);
+}
+
+.detalhes-top-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  margin: 0 auto 1rem auto;
+}
+
+.btn-voltar-override {
+  margin: 0;
+}
+
+.btn-gerenciar-override {
+  background-color: var(--primary-blue);
+  color: var(--white);
+  border-color: var(--primary-blue);
+  margin: 0;
+}
+
+.btn-gerenciar-override:hover {
+  background-color: var(--primary-blue-hover);
+  border-color: var(--primary-blue-hover);
+}
+
+.detalhes-contador-inscritos {
+  margin: 0.5rem 0;
+  font-size: 1.05rem;
+  font-weight: 500;
+  color: var(--text-gray);
+}
+
+@media (min-width: 768px) {
+  .eventos-grid-page {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.filtro-container {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.filtro-label {
+  margin: 0;
+  color: var(--text-gray);
+  font-weight: bold;
+}
+
+.grid-mensagem-vazia {
+  grid-column: 1 / -1;
+  text-align: center;
+  color: var(--text-muted);
+  padding: 2rem 0;
+}
+
+.card-descricao-resumo {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-top: 0.5rem;
+}

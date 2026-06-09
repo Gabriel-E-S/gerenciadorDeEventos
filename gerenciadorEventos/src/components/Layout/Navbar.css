@@ -1,0 +1,193 @@
+.navbar a {
+  text-decoration: none;
+  color: var(--white);
+  transition: var(--transition-fast); 
+}
+
+.navbar a:hover {
+  opacity: 0.9;
+}
+
+.navbar {
+  background-color: var(--primary-blue);
+  padding: 0.75rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  box-shadow: var(--shadow-md); 
+  flex-wrap: wrap; 
+}
+
+.navbar-logo {
+  flex: 1;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.navbar-logo h1 {
+  color: var(--white);
+  font-size: 1.5rem;
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.menu-toggle {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--white);
+  font-size: 1.8rem;
+  cursor: pointer;
+}
+
+.navbar-menu-container {
+  display: flex;
+  flex: 2; 
+  justify-content: space-between;
+  align-items: center;
+  width: auto;
+}
+
+.navbar-links {
+  display: flex;
+  list-style: none;
+  gap: 2rem;
+  margin: 0;
+  padding: 0;
+}
+
+.navbar-links a {
+  font-weight: 500;
+  font-size: 1rem;
+}
+
+.navbar-auth {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.saudacao {
+  color: rgba(255, 255, 255, 0.7); 
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase; 
+  letter-spacing: 1px;
+  cursor: default; 
+  user-select: none;
+}
+
+.btn-login {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.btn-register, .btn-sair {
+  padding: 0.5rem 1.2rem;
+  border-radius: var(--radius-md); 
+  font-weight: 600;
+  font-size: 0.95rem;
+  border: none;
+  cursor: pointer;
+  transition: var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  box-sizing: border-box;
+}
+
+.btn-register {
+  background-color: var(--white);
+  color: var(--primary-blue) !important;
+}
+
+.btn-register:hover {
+  background-color: rgba(255, 255, 255, 0.95);
+}
+
+.btn-sair {
+  background-color: var(--danger-red); 
+  color: var(--white) !important;
+}
+
+.btn-sair:hover {
+  background-color: var(--danger-red-hover); 
+}
+
+@media (max-width: 768px) {
+  .navbar {
+    padding: 1rem 1.5rem;
+  }
+
+  .navbar-logo {
+    flex: 1;
+  }
+
+  .menu-toggle {
+    display: block;
+    background: none;
+    border: none;
+    color: white;
+    font-size: 1.8rem;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .navbar-menu-container {
+    display: none;
+    flex: none; 
+    width: 100%;
+    flex-direction: column;
+    align-items: center; 
+    margin-top: 1rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .navbar-menu-container.aberto {
+    display: flex;
+    animation: fadeInMenu 0.3s ease; 
+  }
+
+  .navbar-links {
+    flex-direction: column;
+    gap: 1.5rem;
+    width: 100%;
+    align-items: center;
+    margin-bottom: 2rem;
+  }
+
+  .navbar-auth {
+    flex-direction: column;
+    width: 100%;
+    gap: 1rem;
+    align-items: center;
+  }
+
+  .saudacao {
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.5rem;
+    padding-top: 0.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15); 
+    border-top: 1px solid rgba(255, 255, 255, 0.15); 
+    width: 100%;
+    max-width: 280px;
+    text-align: center;
+  }
+
+  .btn-register, .btn-sair, .btn-login {
+    width: 100%;
+    max-width: 280px;
+    text-align: center;
+  }
+}
+
+@keyframes fadeInMenu {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}

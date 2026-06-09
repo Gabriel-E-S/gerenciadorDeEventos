@@ -1,0 +1,153 @@
+.events-section {
+  padding: 4rem 1.5rem;
+  background-color: var(--bg-main); 
+}
+
+.events-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.event-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg); 
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: var(--shadow-md); 
+  transition: var(--transition-fast); 
+}
+
+.event-card:hover {
+  transform: translateY(-5px);
+  background-color: var(--light-cyan);
+}
+
+.event-image {
+  background-color: var(--primary-blue);
+  height: 160px;
+  width: 100%;
+  opacity: 0.1; 
+}
+
+.event-details {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+}
+
+.event-details h3 {
+  font-size: 1.2rem;
+  margin-bottom: 0.5rem;
+}
+
+.event-meta {
+  font-size: 0.9rem;
+  color: var(--text-gray);
+  margin-bottom: 1.5rem;
+  flex-grow: 1;
+}
+
+.btn-inscricao {
+  width: 100%;
+  background-color: var(--primary-blue);
+  color: var(--white);
+  border: none;
+  padding: 0.75rem;
+  border-radius: var(--radius-md); 
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-fast); 
+}
+
+.btn-inscricao:hover {
+  background-color: var(--primary-blue-hover); 
+}
+
+/* Desktop */
+@media (min-width: 768px) {
+  .events-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}.events-section {
+  padding: 4rem 1.5rem;
+  background-color: var(--bg-main); 
+}
+
+.events-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.event-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg); 
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: var(--shadow-md); 
+  transition: var(--transition-fast); 
+}
+
+.event-card:hover {
+  transform: translateY(-5px);
+  background-color: var(--light-cyan);
+}
+
+.event-image {
+  background-color: var(--primary-blue);
+  height: 160px;
+  width: 100%;
+  opacity: 0.1; 
+}
+
+.event-details {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+}
+
+.event-details h3 {
+  font-size: 1.2rem;
+  margin-bottom: 0.5rem;
+}
+
+.event-meta {
+  font-size: 0.9rem;
+  color: var(--text-gray);
+  margin-bottom: 1.5rem;
+  flex-grow: 1;
+}
+
+.btn-inscricao {
+  width: 100%;
+  background-color: var(--primary-blue);
+  color: var(--white);
+  border: none;
+  padding: 0.75rem;
+  border-radius: var(--radius-md); 
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-fast); 
+}
+
+.btn-inscricao:hover {
+  background-color: var(--primary-blue-hover); 
+}
+
+/* Desktop */
+@media (min-width: 768px) {
+  .events-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
