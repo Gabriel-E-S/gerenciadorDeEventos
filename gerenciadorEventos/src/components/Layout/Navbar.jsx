@@ -20,7 +20,7 @@ export default function Navbar() {
   return (
     <nav className="navbar">
       <div className="navbar-logo">
-        <Link to="/" onClick={fecharMenu}><h1>TôNaLista</h1></Link>
+        <Link to="/" onClick={fecharMenu}><h1>Aki</h1></Link>
       </div>
 
       <button 
