@@ -194,19 +194,22 @@ app.post('/api/eventos', verificarToken, async (req, res) => {
             VALUES (?, ?, ?, ?, ?, ?, ?)
         `;
         const [result] = await db.execute(query, [
-            id_usuario_gerente, 
-            titulo, 
-            descricao || null, 
-            dataInicio, 
-            dataFim, 
-            local || null, 
-            numeroVagas || null
+            id_usuario_gerente, titulo, descricao || null, dataInicio, dataFim, local || null, numeroVagas || null
         ]);
         
         res.status(201).json({ mensagem: "Evento criado com sucesso!", id_evento: result.insertId });
     } catch (erro) {
         console.error("Erro ao criar evento:", erro);
-        res.status(500).json({ erro: "Erro interno ao criar evento." });
+        
+        const msgErro = erro.sqlMessage || erro.message || "";
+        if (msgErro.includes('chk_evento_datas')) {
+            return res.status(400).json({ erro: "A data e hora de fim do evento não podem ser anteriores ao início." });
+        }
+        if (msgErro.includes('numeroVagas')) {
+            return res.status(400).json({ erro: "O número de vagas deve ser maior que zero." });
+        }
+
+        res.status(500).json({ erro: "Erro interno do servidor: " + msgErro });
     }
 });
 
@@ -250,7 +253,6 @@ app.put('/api/eventos/:id', verificarToken, async (req, res) => {
     const { titulo, descricao, dataInicio, dataFim, local, numeroVagas } = req.body;
     const { id } = req.params;
 
-    // Verifica posse
     const autorizado = await verificarDonoOuAdmin(req.usuario.id, req.usuario.perfil, id);
     if (!autorizado) {
         return res.status(403).json({ erro: "Acesso negado. Você só pode editar eventos que você mesmo criou." });
@@ -274,7 +276,16 @@ app.put('/api/eventos/:id', verificarToken, async (req, res) => {
         res.status(200).json({ mensagem: "Evento atualizado com sucesso!" });
     } catch (erro) {
         console.error("Erro ao atualizar evento:", erro);
-        res.status(500).json({ erro: "Erro interno ao atualizar evento." });
+        
+        const msgErro = erro.sqlMessage || erro.message || "";
+        if (msgErro.includes('chk_evento_datas')) {
+            return res.status(400).json({ erro: "A data e hora de fim do evento não podem ser anteriores ao início." });
+        }
+        if (msgErro.includes('numeroVagas')) {
+            return res.status(400).json({ erro: "O número de vagas deve ser maior que zero." });
+        }
+
+        res.status(500).json({ erro: "Erro interno do servidor: " + msgErro });
     }
 });
 
@@ -300,7 +311,17 @@ app.post('/api/atividades', verificarToken, async (req, res) => {
         res.status(201).json({ mensagem: "Atividade adicionada com sucesso!" });
     } catch (erro) {
         console.error("Erro ao criar atividade:", erro);
-        res.status(500).json({ erro: "Erro interno ao criar atividade." });
+        
+        const msgErro = erro.sqlMessage || erro.message || "";
+        
+        if (msgErro.includes('chk_atividade_horarios')) {
+            return res.status(400).json({ erro: "O horário de término não pode ser anterior ou igual ao horário de início." });
+        }
+        if (msgErro.includes('capacidadeMaxima')) {
+            return res.status(400).json({ erro: "A capacidade de participantes deve ser um número maior que zero." });
+        }
+
+        res.status(500).json({ erro: "Erro interno do servidor: " + msgErro });
     }
 });
 
@@ -312,8 +333,8 @@ app.get('/api/eventos/:id/atividades', async (req, res) => {
         const query = `
             SELECT 
                 a.*,
-                COUNT(DISTINCT ia.id_inscricaoAtividade) AS vagasPreenchidas, -- ✨ Alterado para bater com o frontend e com DISTINCT
-                COUNT(DISTINCT rp.id_registroPresenca) AS checkinsRealizados   -- ✨ Adicionado DISTINCT para segurança
+                COUNT(DISTINCT ia.id_inscricaoAtividade) AS vagasPreenchidas, 
+                COUNT(DISTINCT rp.id_registroPresenca) AS checkinsRealizados   
             FROM Atividade a
             LEFT JOIN InscricaoAtividade ia ON a.id_atividade = ia.id_atividade
             LEFT JOIN RegistroPresenca rp ON ia.id_inscricaoAtividade = rp.id_inscricaoAtividade
@@ -329,16 +350,15 @@ app.get('/api/eventos/:id/atividades', async (req, res) => {
         res.status(500).json({ erro: "Erro ao carregar atividades." });
     }
 });
+
 app.put('/api/atividades/:id', verificarToken, async (req, res) => {
     const { titulo, data, horarioInicio, horarioFim, capacidadeMaxima } = req.body;
     const { id } = req.params;
 
     try {
-        
         const [ativRes] = await db.execute('SELECT id_evento FROM Atividade WHERE id_atividade = ?', [id]);
         if (ativRes.length === 0) return res.status(404).json({ erro: "Atividade não encontrada." });
 
-        
         const autorizado = await verificarDonoOuAdmin(req.usuario.id, req.usuario.perfil, ativRes[0].id_evento);
         if (!autorizado) return res.status(403).json({ erro: "Acesso negado." });
 
@@ -354,10 +374,19 @@ app.put('/api/atividades/:id', verificarToken, async (req, res) => {
         res.status(200).json({ mensagem: "Atividade atualizada com sucesso!" });
     } catch (erro) {
         console.error("Erro ao atualizar atividade:", erro);
-        res.status(500).json({ erro: "Erro interno ao atualizar atividade." });
+        
+        const msgErro = erro.sqlMessage || erro.message || "";
+
+        if (msgErro.includes('chk_atividade_horarios')) {
+            return res.status(400).json({ erro: "O horário de término não pode ser anterior ou igual ao horário de início." });
+        }
+        if (msgErro.includes('capacidadeMaxima')) {
+            return res.status(400).json({ erro: "A capacidade de participantes deve ser um número maior que zero." });
+        }
+
+        res.status(500).json({ erro: "Erro interno do servidor: " + msgErro });
     }
 });
-
 app.get('/api/atividades', async (req, res) => {
     try {
         const query = `
