@@ -107,12 +107,11 @@ export default function NovoEvento() {
               </div>
             </div>
 
-            <div className="editar-footer-actions" style={{ justifyContent: 'center' }}>
+            <div className="editar-footer-actions">
               <button 
                 type="button" 
                 onClick={() => navigate('/eventos')} 
                 className="btn-concluir" 
-                style={{ margin: 0, width: '100%', maxWidth: '300px' }}
               >
                 Voltar para a Vitrine
               </button>
