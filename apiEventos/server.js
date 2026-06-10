@@ -387,7 +387,7 @@ app.post('/api/inscricao', verificarToken, async (req, res) => {
         const { capacidadeMaxima, data, horarioFim } = atividadeRes[0];
 
         const dataFormatada = new Date(data).toISOString().split('T')[0];
-        const dataHoraFimAtividade = new Date(`${dataFormatada}T${horarioFim}`);
+        const dataHoraFimAtividade = new Date(`${dataFormatada}T${horarioFim}-03:00`); // Foi preciso fazer isso pq o servidor está em fuso horário diferente ;/
         const agora = new Date();
 
         if (agora > dataHoraFimAtividade) {
