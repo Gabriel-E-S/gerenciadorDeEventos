@@ -503,8 +503,8 @@ app.post('/api/validar-presenca', verificarToken, async (req, res) => {
 
         const dataAtividadeStr = new Date(info.data).toISOString().split('T')[0];
         
-        const dataHoraInicio = new Date(`${dataAtividadeStr}T${info.horarioInicio}`);
-        const dataHoraFim = new Date(`${dataAtividadeStr}T${info.horarioFim}`);
+        const dataHoraInicio = new Date(`${dataAtividadeStr}T${info.horarioInicio}-03:00`);
+        const dataHoraFim = new Date(`${dataAtividadeStr}T${info.horarioFim}-03:00`);
         
         const inicioPermitido = new Date(dataHoraInicio.getTime() - (TOLERANCIA_ANTES * 60 * 1000));
         const fimPermitido = new Date(dataHoraFim.getTime() + (TOLERANCIA_DEPOIS * 60 * 1000));
@@ -556,6 +556,7 @@ app.post('/api/validar-presenca', verificarToken, async (req, res) => {
         res.status(500).json({ status: "erro", mensagem: "Erro interno ao processar validação." });
     }
 });
+
 app.delete('/api/inscricao/:id_inscricao', verificarToken, async (req, res) => {
     const id_usuario = req.usuario.id;
     const { id_inscricao } = req.params;
