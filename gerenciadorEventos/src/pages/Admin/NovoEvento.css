@@ -355,6 +355,50 @@
   color: #065f46;
 }
 
+.cadastro-novo-box {
+  background-color: var(--bg-main);
+  padding: 1.5rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+.tabela-responsiva {
+  width: 100%;
+  overflow-x: auto; /* Permite rolar a tabela pro lado no celular */
+  margin-top: 1rem;
+}
+
+.tabela-usuarios {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.tabela-usuarios th,
+.tabela-usuarios td {
+  padding: 1rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.tabela-usuarios th {
+  background-color: var(--bg-main);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/* Estilo para o Select de Perfil */
+.select-perfil {
+  padding: 0.5rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.select-perfil.participante { background-color: var(--bg-main); color: var(--text-main); }
+.select-perfil.organizador { background-color: var(--light-cyan); color: var(--dark-blue); }
+.select-perfil.administrador { background-color: #fee2e2; color: #991b1b; } /* Fundo vermelho claro para destaque */
+
 @media (max-width: 600px) {
   .form-row {
     flex-direction: column;

@@ -792,6 +792,48 @@ app.get('/api/eventos/:id/estatisticas', async (req, res) => {
     }
 });
 
+// Rota para listar todos os usuários (Apenas Admin)
+app.get('/api/admin/usuarios', verificarToken, async (req, res) => {
+    if (req.usuario.perfil !== 'ADMINISTRADOR') {
+        return res.status(403).json({ erro: "Acesso negado. Apenas administradores podem ver a lista de usuários." });
+    }
+
+    try {
+        const query = 'SELECT id_usuario, nome, email, cpf, ra, tipoPerfil FROM Usuario ORDER BY nome ASC';
+        const [usuarios] = await db.execute(query);
+        res.status(200).json(usuarios);
+    } catch (erro) {
+        console.error("Erro ao buscar usuários:", erro);
+        res.status(500).json({ erro: "Erro interno ao carregar a lista de usuários." });
+    }
+});
+
+// Rota para alterar o perfil de um usuário (Apenas Admin)
+app.put('/api/admin/usuarios/:id/perfil', verificarToken, async (req, res) => {
+    if (req.usuario.perfil !== 'ADMINISTRADOR') {
+        return res.status(403).json({ erro: "Acesso negado. Apenas administradores podem alterar perfis." });
+    }
+
+    const { novoPerfil } = req.body;
+    const id_alvo = req.params.id;
+
+    if (!['PARTICIPANTE', 'ORGANIZADOR', 'ADMINISTRADOR'].includes(novoPerfil)) {
+        return res.status(400).json({ erro: "Perfil inválido." });
+    }
+
+    try {
+        if (Number(id_alvo) === Number(req.usuario.id) && novoPerfil !== 'ADMINISTRADOR') {
+            return res.status(400).json({ erro: "Operação bloqueada: Você não pode remover o seu próprio acesso de Administrador." });
+        }
+
+        await db.execute('UPDATE Usuario SET tipoPerfil = ? WHERE id_usuario = ?', [novoPerfil, id_alvo]);
+        res.status(200).json({ mensagem: "Perfil atualizado com sucesso!" });
+    } catch (erro) {
+        console.error("Erro ao atualizar perfil:", erro);
+        res.status(500).json({ erro: "Erro interno ao atualizar o perfil do usuário." });
+    }
+});
+
 const PORT = process.env.DB_PORT;
 app.listen(PORT, () => {
     console.log(`Servidor rodando na porta ${PORT}`);
