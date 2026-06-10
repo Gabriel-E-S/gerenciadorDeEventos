@@ -22,7 +22,7 @@ export default function Scanner() {
       if (scanner) scanner.pause(true); 
 
       try {
-        const resposta = await fetch('http://localhost:3000/api/validar-presenca', {
+        const resposta = await fetch('https://gerenciadordeeventos.onrender.com/api/validar-presenca', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

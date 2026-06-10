@@ -15,7 +15,7 @@ export default function Eventos() {
   useEffect(() => {
     const buscarEventos = async () => {
       try {
-        const resposta = await fetch('http://localhost:3000/api/eventos');
+        const resposta = await fetch('https://gerenciadordeeventos.onrender.com/api/eventos');
         if (resposta.ok) {
           const dados = await resposta.json();
           setListaEventos(dados);

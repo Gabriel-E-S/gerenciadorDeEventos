@@ -27,7 +27,7 @@ export default function CadastroOrganizador() {
     const tokenSessao = localStorage.getItem('tokenSessao');
 
     try {
-      const resposta = await fetch('http://localhost:3000/api/admin/organizadores', {
+      const resposta = await fetch('https://gerenciadordeeventos.onrender.com/api/admin/organizadores', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

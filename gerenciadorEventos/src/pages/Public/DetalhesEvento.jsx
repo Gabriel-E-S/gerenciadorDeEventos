@@ -18,7 +18,7 @@ export default function DetalhesEvento() {
   useEffect(() => {
     const buscarDados = async () => {
       try {
-        const resEvento = await fetch(`http://localhost:3000/api/eventos/${id}`);
+        const resEvento = await fetch(`https://gerenciadordeeventos.onrender.com/api/eventos/${id}`);
         if (resEvento.ok) {
           const dadosEvento = await resEvento.json();
           setEvento(dadosEvento);
@@ -27,7 +27,7 @@ export default function DetalhesEvento() {
           return;
         }
 
-        const resAtividades = await fetch(`http://localhost:3000/api/eventos/${id}/atividades`);
+        const resAtividades = await fetch(`https://gerenciadordeeventos.onrender.com/api/eventos/${id}/atividades`);
         if (resAtividades.ok) {
           const dadosAtividades = await resAtividades.json();
           setAtividades(dadosAtividades);
@@ -35,7 +35,7 @@ export default function DetalhesEvento() {
 
         const tokenSessao = localStorage.getItem('tokenSessao');
         if (tokenSessao) {
-          const resIngressos = await fetch('http://localhost:3000/api/meus-ingressos', {
+          const resIngressos = await fetch('https://gerenciadordeeventos.onrender.com/api/meus-ingressos', {
             headers: { 'Authorization': `Bearer ${tokenSessao}` }
           });
           if (resIngressos.ok) {
@@ -66,7 +66,7 @@ export default function DetalhesEvento() {
     }
 
     try {
-      const resposta = await fetch('http://localhost:3000/api/inscricao', {
+      const resposta = await fetch('https://gerenciadordeeventos.onrender.com/api/inscricao', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

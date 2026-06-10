@@ -20,7 +20,7 @@ export default function NovoEvento() {
   const handleCriarEvento = async (e) => {
     e.preventDefault();
     try {
-      const resposta = await fetch('http://localhost:3000/api/eventos', {
+      const resposta = await fetch('https://gerenciadordeeventos.onrender.com/api/eventos', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -44,7 +44,7 @@ export default function NovoEvento() {
   const handleAdicionarAtividade = async (e) => {
     e.preventDefault();
     try {
-      const resposta = await fetch('http://localhost:3000/api/atividades', {
+      const resposta = await fetch('https://gerenciadordeeventos.onrender.com/api/atividades', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

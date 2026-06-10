@@ -43,7 +43,7 @@ export default function EditarEvento() {
 
   const carregarDados = async () => {
     try {
-      const resEvento = await fetch(`http://localhost:3000/api/eventos/${id}`);
+      const resEvento = await fetch(`https://gerenciadordeeventos.onrender.com/api/eventos/${id}`);
       if (resEvento.ok) {
         const dados = await resEvento.json();
         setEventoData({
@@ -60,12 +60,12 @@ export default function EditarEvento() {
         return;
       }
 
-      const resAtividades = await fetch(`http://localhost:3000/api/eventos/${id}/atividades`);
+      const resAtividades = await fetch(`https://gerenciadordeeventos.onrender.com/api/eventos/${id}/atividades`);
       if (resAtividades.ok) {
         setListaAtividades(await resAtividades.json());
       }
 
-      const resMetricas = await fetch(`http://localhost:3000/api/eventos/${id}/estatisticas`);
+      const resMetricas = await fetch(`https://gerenciadordeeventos.onrender.com/api/eventos/${id}/estatisticas`);
         if (resMetricas.ok) {
           setMetricas(await resMetricas.json());
         }
@@ -84,7 +84,7 @@ export default function EditarEvento() {
   const handleSalvarEvento = async (e) => {
     e.preventDefault();
     try {
-      const resposta = await fetch(`http://localhost:3000/api/eventos/${id}`, {
+      const resposta = await fetch(`https://gerenciadordeeventos.onrender.com/api/eventos/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenSessao}` },
         body: JSON.stringify(eventoData)
@@ -100,7 +100,7 @@ export default function EditarEvento() {
   const handleSalvarEdicaoAtividade = async (e) => {
     e.preventDefault();
     try {
-      const resposta = await fetch(`http://localhost:3000/api/atividades/${atividadeEditandoId}`, {
+      const resposta = await fetch(`https://gerenciadordeeventos.onrender.com/api/atividades/${atividadeEditandoId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenSessao}` },
         body: JSON.stringify({
@@ -128,7 +128,7 @@ export default function EditarEvento() {
   const handleCriarNovaAtividade = async (e) => {
     e.preventDefault();
     try {
-      const resposta = await fetch('http://localhost:3000/api/atividades', {
+      const resposta = await fetch('https://gerenciadordeeventos.onrender.com/api/atividades', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenSessao}` },
         body: JSON.stringify({
@@ -158,7 +158,7 @@ export default function EditarEvento() {
   const handleExcluirAtividade = async (id_atividade) => {
     if (!window.confirm("ATENÇÃO: Isso excluirá esta atividade e as inscrições de todos os alunos. Continuar?")) return;
     try {
-      const resposta = await fetch(`http://localhost:3000/api/atividades/${id_atividade}`, {
+      const resposta = await fetch(`https://gerenciadordeeventos.onrender.com/api/atividades/${id_atividade}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${tokenSessao}` }
       });
@@ -172,7 +172,7 @@ export default function EditarEvento() {
   const handleExcluirEvento = async () => {
     if (!window.confirm("ALERTA: Você está prestes a excluir o EVENTO INTEIRO e todos os dados vinculados a ele. Esta ação é IRREVERSÍVEL. Confirmar?")) return;
     try {
-      const resposta = await fetch(`http://localhost:3000/api/eventos/${id}`, {
+      const resposta = await fetch(`https://gerenciadordeeventos.onrender.com/api/eventos/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${tokenSessao}` }
       });
@@ -185,7 +185,7 @@ export default function EditarEvento() {
 
   const handleExportarRelatorio = async () => {
     try {
-      const resposta = await fetch(`http://localhost:3000/api/eventos/${id}/relatorio`, {
+      const resposta = await fetch(`https://gerenciadordeeventos.onrender.com/api/eventos/${id}/relatorio`, {
         headers: { 'Authorization': `Bearer ${tokenSessao}` }
       });
       const dados = await resposta.json();

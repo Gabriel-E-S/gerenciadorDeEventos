@@ -28,7 +28,7 @@ export default function Dashboard() {
     const buscarMeusIngressos = async () => {
       try {
         const tokenSessao = localStorage.getItem('tokenSessao');
-        const res = await fetch('http://localhost:3000/api/meus-ingressos', {
+        const res = await fetch('https://gerenciadordeeventos.onrender.com/api/meus-ingressos', {
           headers: { 'Authorization': `Bearer ${tokenSessao}` }
         });
         if (res.ok) {
@@ -52,7 +52,7 @@ export default function Dashboard() {
 
     const obterNovoToken = async () => {
       try {
-        const res = await fetch(`http://localhost:3000/api/ingresso?id_inscricaoAtividade=${ingressoSelecionado.id_inscricaoAtividade}`, {
+        const res = await fetch(`https://gerenciadordeeventos.onrender.com/api/ingresso?id_inscricaoAtividade=${ingressoSelecionado.id_inscricaoAtividade}`, {
           headers: { 'Authorization': `Bearer ${tokenSessao}` }
         });
         if (res.ok) {
@@ -86,7 +86,7 @@ export default function Dashboard() {
 
     try {
       const tokenSessao = localStorage.getItem('tokenSessao');
-      const res = await fetch(`http://localhost:3000/api/inscricao/${ingressoSelecionado.id_inscricaoAtividade}`, {
+      const res = await fetch(`https://gerenciadordeeventos.onrender.com/api/inscricao/${ingressoSelecionado.id_inscricaoAtividade}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${tokenSessao}` }
       });
@@ -95,7 +95,7 @@ export default function Dashboard() {
       if (res.ok) {
         alert("Ok " + dados.mensagem);
         setIngressoSelecionado(null); 
-        const resLista = await fetch('http://localhost:3000/api/meus-ingressos', { headers: { 'Authorization': `Bearer ${tokenSessao}` }});
+        const resLista = await fetch('https://gerenciadordeeventos.onrender.com/api/meus-ingressos', { headers: { 'Authorization': `Bearer ${tokenSessao}` }});
         setIngressos(await resLista.json());
       } else {
         alert("Erro " + dados.erro);
