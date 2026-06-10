@@ -14,6 +14,8 @@ export default function Auth() {
   const [mensagemErro, setMensagemErro] = useState('');
   const [isCarregando, setIsCarregando] = useState(false);
 
+  const apiUrl =  'https://gerenciadordeeventos.onrender.com';
+
   useEffect(() => {
     if (location.state !== null && location.state.modoLogin !== undefined) {
       setIsLogin(location.state.modoLogin);
@@ -25,9 +27,9 @@ export default function Auth() {
     setMensagemErro('');
     setIsCarregando(true);
     try {
-      const resposta = await fetch('https://gerenciadordeeventos.onrender.com/api/login', {
+      const resposta = await fetch(`${apiUrl}/api/login`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' }, // Login continua JSON
         body: JSON.stringify(dadosLogin)
       });
       const dados = await resposta.json();
@@ -47,14 +49,13 @@ export default function Auth() {
     }
   };
 
-  const handleCadastroSubmit = async (dadosCadastro) => {
+  const handleCadastroSubmit = async (formDataCadastro) => {
     setMensagemErro('');
     setIsCarregando(true);
     try {
-      const resposta = await fetch('https://gerenciadordeeventos.onrender.com/api/cadastro', {
+      const resposta = await fetch(`${apiUrl}/api/cadastro`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dadosCadastro)
+        body: formDataCadastro
       });
       const dados = await resposta.json();
       if (!resposta.ok) throw new Error(dados.erro || 'Erro ao cadastrar');

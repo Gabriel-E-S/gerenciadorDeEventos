@@ -90,7 +90,8 @@ app.get('/api/status', async (req, res) => {
     }
 });
 
-app.post('/api/cadastro', async (req, res) => {
+// Rota de cadastro.
+app.post('/api/cadastro', upload.single('fotoPerfil'), async (req, res) => {
     const { nome, email, senha, documento } = req.body;
 
     if (!nome || !email || !senha) {
@@ -121,12 +122,31 @@ app.post('/api/cadastro', async (req, res) => {
             }
         }
 
+        let fotoUrl = null;
+
+        if (req.file) {
+            fotoUrl = await new Promise((resolve, reject) => {
+                const uploadStream = cloudinary.uploader.upload_stream(
+                    { 
+                        folder: 'eventos_perfil',
+                        format: 'jpg',
+                        transformation: [{ width: 400, height: 400, crop: 'fill' }] 
+                    },
+                    (error, result) => {
+                        if (error) reject(error);
+                        else resolve(result.secure_url);
+                    }
+                );
+                uploadStream.end(req.file.buffer);
+            });
+        }
+
         const query = `
-            INSERT INTO Usuario (nome, email, senha, cpf, ra, tipoPerfil) 
-            VALUES (?, ?, ?, ?, ?, 'PARTICIPANTE')
+            INSERT INTO Usuario (nome, email, senha, cpf, ra, tipoPerfil, fotoUrl) 
+            VALUES (?, ?, ?, ?, ?, 'PARTICIPANTE', ?)
         `;
         
-        await db.execute(query, [nome, email, senhaHash, cpf, ra]);
+        await db.execute(query, [nome, email, senhaHash, cpf, ra, fotoUrl]);
         res.status(201).json({ mensagem: "Conta criada com sucesso!" });
 
     } catch (erro) {

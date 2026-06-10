@@ -5,10 +5,22 @@ export default function FormCadastro({ onSubmit, isCarregando }) {
   const [documento, setDocumento] = useState('');
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
+  const [fotoPerfil, setFotoPerfil] = useState(null); 
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSubmit({ nome, documento, email, senha });
+    
+    const formData = new FormData();
+    formData.append('nome', nome);
+    formData.append('documento', documento);
+    formData.append('email', email);
+    formData.append('senha', senha);
+    
+    if (fotoPerfil) {
+      formData.append('fotoPerfil', fotoPerfil);
+    }
+
+    onSubmit(formData); 
   };
 
   return (
@@ -57,8 +69,21 @@ export default function FormCadastro({ onSubmit, isCarregando }) {
           disabled={isCarregando}
         />
       </div>
+      
+      <div className="form-group">
+        <label>Foto de Perfil</label>
+        <input 
+          type="file" 
+          accept="image/png, image/jpeg, image/jpg" 
+          onChange={(e) => setFotoPerfil(e.target.files[0])} 
+          required
+          disabled={isCarregando}
+          style={{ padding: '0.4rem 0' }}
+        />
+      </div>
+
       <button type="submit" className="btn-auth-submit" disabled={isCarregando}>
-        {isCarregando ? 'Cadastrando...' : 'Cadastrar'}
+        {isCarregando ? 'Criando e enviando foto...' : 'Cadastrar'}
       </button>
     </form>
   );
