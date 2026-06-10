@@ -88,16 +88,36 @@ export default function NovoEvento() {
         />
 
         {idEventoCriado && (
-          <div className="atividades-section">
-            <h3>Adicionar Atividades ao Evento</h3>
-            <FormularioAtividade 
-              atividadeData={atividadeData}
-              setAtividadeData={setAtividadeData}
-              onSubmit={handleAdicionarAtividade}
-              onFinalizar={() => navigate('/eventos')}
-              textoBotaoSecundario="Finalizar e Ir para a Vitrine" 
-            />
-          </div>
+          <>
+            <div className="atividades-section">
+              <div className="nova-atividade-box">
+                <h4 className="nova-atividade-titulo">Nova Atividade</h4>
+                
+                <FormularioAtividade 
+                  atividadeData={atividadeData}
+                  setAtividadeData={setAtividadeData}
+                  onSubmit={handleAdicionarAtividade}
+          
+                  onFinalizar={() => setAtividadeData({
+                    tituloAtividade: '', dataAtividade: '', horaInicio: '', horaFim: '', capacidade: ''
+                  })}
+                  textoBotaoPrincipal="Salvar Nova Atividade"
+                  textoBotaoSecundario="Cancelar/ Limpar"
+                />
+              </div>
+            </div>
+
+            <div className="editar-footer-actions" style={{ justifyContent: 'center' }}>
+              <button 
+                type="button" 
+                onClick={() => navigate('/eventos')} 
+                className="btn-concluir" 
+                style={{ margin: 0, width: '100%', maxWidth: '300px' }}
+              >
+                Voltar para a Vitrine
+              </button>
+            </div>
+          </>
         )}
       </div>
     </section>

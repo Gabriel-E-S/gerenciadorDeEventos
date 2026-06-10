@@ -454,10 +454,10 @@ app.get('/api/meus-ingressos', verificarToken, async (req, res) => {
         res.status(500).json({ erro: "Erro ao carregar a lista de ingressos." });
     }
 });
-
 app.post('/api/validar-presenca', verificarToken, async (req, res) => {
     const { token_lido } = req.body;
     const id_organizador = req.usuario.id; 
+    const perfil_organizador = req.usuario.perfil; // Precisamos do perfil para saber se é ADMIN
 
     let id_inscricao;
     try {
@@ -471,6 +471,7 @@ app.post('/api/validar-presenca', verificarToken, async (req, res) => {
     }
 
     try {
+
         const queryToken = `
             SELECT 
                 ia.id_inscricaoAtividade,
@@ -480,9 +481,11 @@ app.post('/api/validar-presenca', verificarToken, async (req, res) => {
                 a.titulo AS titulo_atividade,
                 a.data,
                 a.horarioInicio,
-                a.horarioFim
+                a.horarioFim,
+                e.id_usuario_gerente
             FROM InscricaoAtividade ia
             JOIN Atividade a ON ia.id_atividade = a.id_atividade
+            JOIN Evento e ON a.id_evento = e.id_evento
             JOIN Usuario u ON ia.id_usuario = u.id_usuario
             WHERE ia.id_inscricaoAtividade = ?
         `;
@@ -497,6 +500,16 @@ app.post('/api/validar-presenca', verificarToken, async (req, res) => {
         }
 
         const info = resultados[0];
+
+        const ehAdministrador = perfil_organizador === 'ADMINISTRADOR';
+        const ehDonoDoEvento = Number(info.id_usuario_gerente) === Number(id_organizador);
+
+        if (!ehAdministrador && !ehDonoDoEvento) {
+            return res.status(403).json({
+                status: "erro",
+                mensagem: "Acesso negado! Você não tem permissão para validar entradas neste evento específico."
+            });
+        }
 
         const TOLERANCIA_ANTES = 15;  
         const TOLERANCIA_DEPOIS = 15; 
@@ -582,11 +595,9 @@ app.delete('/api/atividades/:id', verificarToken, async (req, res) => {
     try {
         const id_atividade = req.params.id;
         
-        // Descobre a qual evento essa atividade pertence
         const [ativRes] = await db.execute('SELECT id_evento FROM Atividade WHERE id_atividade = ?', [id_atividade]);
         if (ativRes.length === 0) return res.status(404).json({ erro: "Atividade não encontrada." });
 
-        // Verifica posse
         const autorizado = await verificarDonoOuAdmin(req.usuario.id, req.usuario.perfil, ativRes[0].id_evento);
         if (!autorizado) return res.status(403).json({ erro: "Acesso negado. Você não é o administrador deste evento." });
         
@@ -639,7 +650,7 @@ app.get('/api/eventos/:id/relatorio', verificarToken, async (req, res) => {
                 ROUND(TIME_TO_SEC(TIMEDIFF(a.horarioFim, a.horarioInicio)) / 3600, 1) AS CargaHoraria,
                 IF(rp.id_registroPresenca IS NOT NULL, 'Presente', 'Ausente') AS Status,
                 COALESCE(uo.nome, '-') AS ValidadoPor,
-                IF(rp.dataHoraLeitura IS NOT NULL, DATE_FORMAT(rp.dataHoraLeitura, '%d/%m/%Y %H:%i:%s'), '-') AS HorarioValidacao
+                IF(rp.dataHoraLeitura IS NOT NULL, DATE_FORMAT(CONVERT_TZ(rp.dataHoraLeitura, '+00:00', '-03:00'), '%d/%m/%Y %H:%i:%s'), '-') AS HorarioValidacao
             FROM InscricaoAtividade ia
             JOIN Usuario u ON ia.id_usuario = u.id_usuario
             JOIN Atividade a ON ia.id_atividade = a.id_atividade
@@ -656,7 +667,6 @@ app.get('/api/eventos/:id/relatorio', verificarToken, async (req, res) => {
         res.status(500).json({ erro: "Erro ao exportar os dados do evento." });
     }
 });
-
 app.post('/api/admin/organizadores', verificarToken, async (req, res) => {
 
     if (req.usuario.perfil !== 'ADMINISTRADOR') {

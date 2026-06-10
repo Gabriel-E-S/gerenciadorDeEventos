@@ -214,7 +214,7 @@ export default function EditarEvento() {
       <div className="admin-card">
         
         <div className="editar-header-top">
-          <h2>Editar Evento Geral</h2>
+          <h2>Editar {eventoData.titulo}</h2>
           <button type="button" onClick={handleExportarRelatorio} className="btn-admin-submit btn-exportar">
             Exportar Presenças (CSV)
           </button>
