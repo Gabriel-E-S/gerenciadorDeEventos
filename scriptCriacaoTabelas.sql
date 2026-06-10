@@ -1,5 +1,5 @@
 
--- Habilita as restrições de checagem no banco
+-- Habilita as restrições de checagem no banco -- É NECESSÁRIO NO tiDB!
 SET GLOBAL tidb_enable_check_constraint = ON;
 
 CREATE DATABASE IF NOT EXISTS gerenciamento_eventos;
