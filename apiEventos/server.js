@@ -8,7 +8,7 @@ const db = require('./db');
 
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
+
 
 const app = express();
 app.use(cors());
@@ -20,16 +20,7 @@ cloudinary.config({
     api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-const storage = new CloudinaryStorage({
-    cloudinary: cloudinary,
-    params: {
-        folder: 'eventos_perfil', 
-        allowed_formats: ['jpg', 'png', 'jpeg'],
-        transformation: [{ width: 400, height: 400, crop: 'fill' }] 
-    },
-});
-
-const upload = multer({ storage: storage });
+const upload = multer({ storage: multer.memoryStorage() });
 
 const verificarToken = (req, res, next) => {
     const headerAuth = req.headers['authorization'];
@@ -149,15 +140,40 @@ app.post('/api/usuario/foto', verificarToken, upload.single('fotoPerfil'), async
     try {
         const id_usuario = req.usuario.id;
         
+        // Verifica se a foto realmente chegou do Frontend
+        if (!req.file) {
+            return res.status(400).json({ erro: "Nenhuma foto foi enviada." });
+        }
 
-        const urlImagem = req.file.path; 
+        // ✅ Transmite a imagem da memória RAM direto para o Cloudinary
+        const uploadStream = cloudinary.uploader.upload_stream(
+            { 
+                folder: 'eventos_perfil',
+                format: 'jpg', // Padroniza o formato para evitar bugs
+                transformation: [{ width: 400, height: 400, crop: 'fill' }] 
+            },
+            async (error, result) => {
+                // Esse bloco só roda quando a nuvem termina de processar a foto
+                if (error) {
+                    console.error("Erro no Cloudinary:", error);
+                    return res.status(500).json({ erro: "Falha ao enviar imagem para a nuvem." });
+                }
+                
+                const urlImagem = result.secure_url; 
+                
+                // Salva a URL oficial gerada no banco de dados
+                await db.execute('UPDATE Usuario SET fotoUrl = ? WHERE id_usuario = ?', [urlImagem, id_usuario]);
 
-        await db.execute('UPDATE Usuario SET fotoUrl = ? WHERE id_usuario = ?', [urlImagem, id_usuario]);
+                return res.status(200).json({ 
+                    mensagem: "Foto atualizada com sucesso!", 
+                    fotoUrl: urlImagem 
+                });
+            }
+        );
 
-        res.status(200).json({ 
-            mensagem: "Foto atualizada com sucesso!", 
-            fotoUrl: urlImagem 
-        });
+        // Dispara o arquivo para o Cloudinary iniciar o upload
+        uploadStream.end(req.file.buffer);
+
     } catch (erro) {
         console.error("Erro no upload:", erro);
         res.status(500).json({ erro: "Erro interno ao processar a imagem." });
