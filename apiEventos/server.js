@@ -6,10 +6,30 @@ require('dotenv').config();
 
 const db = require('./db'); 
 
-const app = express();
+const multer = require('multer');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
+const app = express();
 app.use(cors());
 app.use(express.json());
+
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+const storage = new CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: {
+        folder: 'eventos_perfil', 
+        allowed_formats: ['jpg', 'png', 'jpeg'],
+        transformation: [{ width: 400, height: 400, crop: 'fill' }] 
+    },
+});
+
+const upload = multer({ storage: storage });
 
 const verificarToken = (req, res, next) => {
     const headerAuth = req.headers['authorization'];
@@ -121,6 +141,26 @@ app.post('/api/cadastro', async (req, res) => {
     } catch (erro) {
         console.error("Erro no cadastro:", erro);
         res.status(500).json({ erro: "Erro interno no servidor." });
+    }
+});
+
+// Rota para o participante fazer upload da sua foto
+app.post('/api/usuario/foto', verificarToken, upload.single('fotoPerfil'), async (req, res) => {
+    try {
+        const id_usuario = req.usuario.id;
+        
+
+        const urlImagem = req.file.path; 
+
+        await db.execute('UPDATE Usuario SET fotoUrl = ? WHERE id_usuario = ?', [urlImagem, id_usuario]);
+
+        res.status(200).json({ 
+            mensagem: "Foto atualizada com sucesso!", 
+            fotoUrl: urlImagem 
+        });
+    } catch (erro) {
+        console.error("Erro no upload:", erro);
+        res.status(500).json({ erro: "Erro interno ao processar a imagem." });
     }
 });
 
@@ -483,121 +523,80 @@ app.get('/api/meus-ingressos', verificarToken, async (req, res) => {
         res.status(500).json({ erro: "Erro ao carregar a lista de ingressos." });
     }
 });
-app.post('/api/validar-presenca', verificarToken, async (req, res) => {
+
+app.post('/api/scanner/ler', verificarToken, async (req, res) => {
     const { token_lido } = req.body;
     const id_organizador = req.usuario.id; 
-    const perfil_organizador = req.usuario.perfil; // Precisamos do perfil para saber se é ADMIN
+    const perfil_organizador = req.usuario.perfil;
 
     let id_inscricao;
     try {
-        const dadosDecodificados = jwt.verify(token_lido, process.env.JWT_SECRET);
-        id_inscricao = dadosDecodificados.id_inscricaoAtividade;
+        id_inscricao = jwt.verify(token_lido, process.env.JWT_SECRET).id_inscricaoAtividade;
     } catch (erro) {
-        return res.status(400).json({
-            status: "erro",
-            mensagem: "QR Code expirado ou inválido. Peça para o participante atualizar a tela."
-        });
+        return res.status(400).json({ status: "erro", mensagem: "QR Code inválido." });
     }
 
     try {
-
+        
         const queryToken = `
-            SELECT 
-                ia.id_inscricaoAtividade,
-                ia.id_usuario AS id_participante,
-                u.nome AS nome_participante,
-                u.ra AS ra_participante,
-                a.titulo AS titulo_atividade,
-                a.data,
-                a.horarioInicio,
-                a.horarioFim,
-                e.id_usuario_gerente
+            SELECT ia.id_inscricaoAtividade, u.nome AS nome_participante, u.ra AS ra_participante, 
+                   u.fotoUrl, a.data, a.horarioInicio, a.horarioFim, e.id_usuario_gerente
             FROM InscricaoAtividade ia
             JOIN Atividade a ON ia.id_atividade = a.id_atividade
             JOIN Evento e ON a.id_evento = e.id_evento
             JOIN Usuario u ON ia.id_usuario = u.id_usuario
             WHERE ia.id_inscricaoAtividade = ?
         `;
-
         const [resultados] = await db.execute(queryToken, [id_inscricao]);
-
-        if (resultados.length === 0) {
-            return res.status(404).json({ 
-                status: "erro", 
-                mensagem: "Inscrição não encontrada no banco de dados." 
-            });
-        }
-
+        
+        if (resultados.length === 0) return res.status(404).json({ status: "erro", mensagem: "Inscrição não encontrada." });
         const info = resultados[0];
 
-        const ehAdministrador = perfil_organizador === 'ADMINISTRADOR';
-        const ehDonoDoEvento = Number(info.id_usuario_gerente) === Number(id_organizador);
-
-        if (!ehAdministrador && !ehDonoDoEvento) {
-            return res.status(403).json({
-                status: "erro",
-                mensagem: "Acesso negado! Você não tem permissão para validar entradas neste evento específico."
-            });
+        if (perfil_organizador !== 'ADMINISTRADOR' && Number(info.id_usuario_gerente) !== Number(id_organizador)) {
+            return res.status(403).json({ status: "erro", mensagem: "Acesso negado para este evento." });
         }
 
-        const TOLERANCIA_ANTES = 15;  
-        const TOLERANCIA_DEPOIS = 15; 
-
+        const TOLERANCIA = 15; 
         const dataAtividadeStr = new Date(info.data).toISOString().split('T')[0];
-        
-        const dataHoraInicio = new Date(`${dataAtividadeStr}T${info.horarioInicio}-03:00`);
-        const dataHoraFim = new Date(`${dataAtividadeStr}T${info.horarioFim}-03:00`);
-        
-        const inicioPermitido = new Date(dataHoraInicio.getTime() - (TOLERANCIA_ANTES * 60 * 1000));
-        const fimPermitido = new Date(dataHoraFim.getTime() + (TOLERANCIA_DEPOIS * 60 * 1000));
-        
+        const inicioPermitido = new Date(new Date(`${dataAtividadeStr}T${info.horarioInicio}-03:00`).getTime() - (TOLERANCIA * 60 * 1000));
+        const fimPermitido = new Date(new Date(`${dataAtividadeStr}T${info.horarioFim}-03:00`).getTime() + (TOLERANCIA * 60 * 1000));
         const agora = new Date();
 
-        if (agora < inicioPermitido) {
-            return res.status(400).json({
-                status: "erro",
-                mensagem: "Muito cedo! O check-in ainda não foi liberado para esta atividade."
-            });
-        }
+        if (agora < inicioPermitido) return res.status(400).json({ status: "erro", mensagem: "Check-in ainda não liberado." });
+        if (agora > fimPermitido) return res.status(400).json({ status: "erro", mensagem: "Prazo de check-in encerrado." });
 
-        if (agora > fimPermitido) {
-            return res.status(400).json({
-                status: "erro",
-                mensagem: "Prazo encerrado! Esta atividade já terminou e a tolerância de check-in expirou."
-            });
-        }
+        const [presencaExistente] = await db.execute('SELECT id_registroPresenca FROM RegistroPresenca WHERE id_inscricaoAtividade = ?', [info.id_inscricaoAtividade]);
+        if (presencaExistente.length > 0) return res.status(400).json({ status: "erro", mensagem: "Este QR Code já foi validado!" });
 
-        const [presencaExistente] = await db.execute(
-            'SELECT id_registroPresenca FROM RegistroPresenca WHERE id_inscricaoAtividade = ?',
-            [info.id_inscricaoAtividade]
-        );
-
-        if (presencaExistente.length > 0) {
-            return res.status(400).json({
-                status: "erro",
-                mensagem: "Aviso: Este QR Code já foi validado anteriormente!"
-            });
-        }
-
-        const queryGravarPresenca = `
-            INSERT INTO RegistroPresenca (id_inscricaoAtividade, id_organizador) 
-            VALUES (?, ?)
-        `;
-        await db.execute(queryGravarPresenca, [info.id_inscricaoAtividade, id_organizador]);
-        
         res.status(200).json({
-            mensagem: "Presença confirmada com sucesso!",
+            status: "pendente_confirmacao",
+            id_inscricaoAtividade: info.id_inscricaoAtividade,
             participante: {
                 nome: info.nome_participante,
-                documento: info.ra_participante ? `RA: ${info.ra_participante}` : `ID: ${info.id_participante}`
+                documento: info.ra_participante || "N/A",
+                foto: info.fotoUrl || "https://res.cloudinary.com/demo/image/upload/d_avatar.png/non_existing_id.png" 
             }
         });
 
     } catch (erro) {
-        console.error("Erro ao validar presença no scanner:", erro);
-        res.status(500).json({ status: "erro", mensagem: "Erro interno ao processar validação." });
+        res.status(500).json({ status: "erro", mensagem: "Erro interno no servidor." });
     }
 });
+
+app.post('/api/scanner/confirmar', verificarToken, async (req, res) => {
+    const { id_inscricaoAtividade } = req.body;
+    const id_organizador = req.usuario.id;
+
+    try {
+        await db.execute('INSERT INTO RegistroPresenca (id_inscricaoAtividade, id_organizador) VALUES (?, ?)', 
+        [id_inscricaoAtividade, id_organizador]);
+        
+        res.status(200).json({ mensagem: "Presença confirmada e salva com sucesso!" });
+    } catch (erro) {
+        res.status(500).json({ erro: "Erro ao gravar a presença no banco de dados." });
+    }
+});
+
 
 app.delete('/api/inscricao/:id_inscricao', verificarToken, async (req, res) => {
     const id_usuario = req.usuario.id;
