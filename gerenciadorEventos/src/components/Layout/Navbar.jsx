@@ -37,8 +37,7 @@ export default function Navbar() {
     
         {usuarioLogado?.perfil === 'ORGANIZADOR' ? (
           <>
-            <li><Link to="/eventos" onClick={fecharMenu}>Gerenciar Eventos</Link></li>
-            <li><Link to="/admin/novo-evento" onClick={fecharMenu}>Criar Evento</Link></li>
+            <li><Link to="/eventos" onClick={fecharMenu}>Gerenciar Eventos</Link></li>  
             <li><Link to="/scanner" onClick={fecharMenu}>Scanner</Link></li>
           </>
         ) : usuarioLogado?.perfil === 'ADMINISTRADOR' ? (
@@ -54,6 +53,10 @@ export default function Navbar() {
           <>
             <li><Link to="/eventos" onClick={fecharMenu}>Explorar Eventos</Link></li>
             <li><Link to="/dashboard" onClick={fecharMenu}>Minha Agenda</Link></li>
+            
+            {usuarioLogado?.isStaff && (
+              <li><Link to="/scanner" onClick={fecharMenu}>Scanner (Equipe)</Link></li>
+            )}
           </>
         ) : (
           

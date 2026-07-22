@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import FormularioEvento from '../../components/Admin/FormularioEvento';
 import FormularioAtividade from '../../components/Admin/FormularioAtividade';
@@ -8,11 +8,10 @@ export default function NovoEvento() {
   const navigate = useNavigate();
   const tokenSessao = localStorage.getItem('tokenSessao');
   const [idEventoCriado, setIdEventoCriado] = useState(null);
-  const [idOrganizador, setIdOrganizador] = useState('');
   const [listaOrganizadores, setListaOrganizadores] = useState([]); 
 
   const [eventoData, setEventoData] = useState({
-    titulo: '', descricao: '', dataInicio: '', dataFim: '', local: '', numeroVagas: ''
+    titulo: '', descricao: '', dataInicio: '', dataFim: '', local: '', numeroVagas: '', idOrganizador: ''
   });
 
   const [atividadeData, setAtividadeData] = useState({
@@ -21,15 +20,22 @@ export default function NovoEvento() {
 
   useEffect(() => {
     async function fetchOrganizadores() {
-        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/organizadores`, {
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://gerenciadordeeventos.onrender.com'}/api/organizadores`, {
             headers: { 'Authorization': `Bearer ${tokenSessao}` }
         });
         const data = await res.json();
         setListaOrganizadores(data);
-        if(data.length > 0) setIdOrganizador(data[0].id_usuario); 
+        
+        if(data.length > 0) {
+          setEventoData(prev => ({ ...prev, idOrganizador: data[0].id_usuario }));
+        }
+      } catch (error) {
+        console.error("Erro ao carregar organizadores:", error);
+      }
     }
     fetchOrganizadores();
-  }, []);
+  }, [tokenSessao]);
 
   const handleCriarEvento = async (e) => {
     e.preventDefault();
@@ -40,7 +46,7 @@ export default function NovoEvento() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${tokenSessao}`
         },
-        body: JSON.stringify(eventoData)
+        body: JSON.stringify(eventoData) 
       });
 
       const dados = await resposta.json();
@@ -91,7 +97,7 @@ export default function NovoEvento() {
   return (
     <section className="admin-container">
       <div className="admin-card">
-        <h2>Painel do Organizador - Novo Evento</h2>
+        <h2>Painel do Administrador - Novo Evento</h2>
         
         <FormularioEvento 
           eventoData={eventoData}
@@ -117,7 +123,7 @@ export default function NovoEvento() {
                     tituloAtividade: '', dataAtividade: '', horaInicio: '', horaFim: '', capacidade: ''
                   })}
                   textoBotaoPrincipal="Salvar Nova Atividade"
-                  textoBotaoSecundario="Cancelar/ Limpar"
+                  textoBotaoSecundario="Cancelar / Limpar"
                 />
               </div>
             </div>

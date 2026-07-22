@@ -1,58 +1,67 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Html5QrcodeScanner, Html5QrcodeScanType } from 'html5-qrcode';
-import './Scanner.css';
+import React, { useEffect, useState, useRef, useContext } from "react"; 
+import { useNavigate } from "react-router-dom";
+import { Html5QrcodeScanner, Html5QrcodeScanType } from "html5-qrcode";
+import { AuthContext } from "../../context/AuthContext"; 
+import "./Scanner.css";
 
 export default function Scanner() {
   const navigate = useNavigate();
-  
+
+  const { usuarioLogado } = useContext(AuthContext);
+
   const [resultadoScan, setResultadoScan] = useState(null);
   const [participantePendente, setParticipantePendente] = useState(null);
-  
-  const scannerRef = useRef(null); 
-  
-  const tokenSessao = localStorage.getItem('tokenSessao');
-  const apiUrl = import.meta.env.VITE_API_URL || 'https://gerenciadordeeventos.onrender.com';
+
+  const scannerRef = useRef(null);
+
+  const tokenSessao = localStorage.getItem("tokenSessao");
+  const apiUrl =
+    import.meta.env.VITE_API_URL || "https://gerenciadordeeventos.onrender.com";
 
   useEffect(() => {
     if (!tokenSessao) {
-      navigate('/login');
+      navigate("/login");
       return;
     }
 
-    let isUnmounted = false; 
+    if (usuarioLogado?.perfil === "PARTICIPANTE" && !usuarioLogado?.isStaff) {
+      alert(
+        "Acesso restrito. Apenas organizadores ou equipe de apoio (Staff) podem acessar o Scanner.",
+      );
+      navigate("/dashboard");
+      return;
+    }
+
+    let isUnmounted = false;
 
     async function onScanSuccess(decodedText) {
-      
-      if (scannerRef.current) scannerRef.current.pause(true); 
+      if (scannerRef.current) scannerRef.current.pause(true);
 
       try {
         const resposta = await fetch(`${apiUrl}/api/scanner/ler`, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${tokenSessao}`
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${tokenSessao}`,
           },
-          body: JSON.stringify({ token_lido: decodedText })
+          body: JSON.stringify({ token_lido: decodedText }),
         });
 
         const dados = await resposta.json();
 
         if (resposta.ok && dados.status === "pendente_confirmacao") {
-          
           setParticipantePendente({
             id_inscricaoAtividade: dados.id_inscricaoAtividade,
-            ...dados.participante
+            ...dados.participante,
           });
-          setResultadoScan(null); 
+          setResultadoScan(null);
         } else {
-          
           setResultadoScan({
             status: "erro",
             mensagem: dados.mensagem || dados.erro,
-            dados: { nome: "Acesso Negado", documento: "Verifique o QR Code" }
+            dados: { nome: "Acesso Negado", documento: "Verifique o QR Code" },
           });
-          
+
           setTimeout(() => {
             if (!isUnmounted) {
               setResultadoScan(null);
@@ -65,7 +74,7 @@ export default function Scanner() {
         setResultadoScan({
           status: "erro",
           mensagem: "Falha de conexão com o servidor.",
-          dados: { nome: "-", documento: "-" }
+          dados: { nome: "-", documento: "-" },
         });
         setTimeout(() => {
           if (!isUnmounted && scannerRef.current) scannerRef.current.resume();
@@ -76,17 +85,17 @@ export default function Scanner() {
     function onScanFailure(error) {
       // Ignora falhas normais do ambiente
     }
-    
+
     const initTimer = setTimeout(() => {
       if (!isUnmounted) {
         scannerRef.current = new Html5QrcodeScanner(
           "reader",
-          { 
-            fps: 10, 
+          {
+            fps: 10,
             qrbox: { width: 250, height: 250 },
-            supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA]
+            supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
           },
-          false
+          false,
         );
         scannerRef.current.render(onScanSuccess, onScanFailure);
       }
@@ -95,34 +104,41 @@ export default function Scanner() {
     return () => {
       isUnmounted = true;
       clearTimeout(initTimer);
-      
+
       if (scannerRef.current) {
-        scannerRef.current.clear().catch(error => {
-          console.error("Aviso: Falha ao limpar a câmera automaticamente.", error);
+        scannerRef.current.clear().catch((error) => {
+          console.error(
+            "Aviso: Falha ao limpar a câmera automaticamente.",
+            error,
+          );
         });
       }
     };
-  }, [navigate, tokenSessao, apiUrl]);
+  }, [navigate, tokenSessao, apiUrl, usuarioLogado]);
 
   const handleConfirmarPresenca = async () => {
     try {
       const resposta = await fetch(`${apiUrl}/api/scanner/confirmar`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${tokenSessao}`
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${tokenSessao}`,
         },
-        body: JSON.stringify({ id_inscricaoAtividade: participantePendente.id_inscricaoAtividade })
+        body: JSON.stringify({
+          id_inscricaoAtividade: participantePendente.id_inscricaoAtividade,
+        }),
       });
 
       const dados = await resposta.json();
 
       if (resposta.ok) {
-        
         setResultadoScan({
           status: "sucesso",
           mensagem: dados.mensagem,
-          dados: { nome: participantePendente.nome, documento: participantePendente.documento }
+          dados: {
+            nome: participantePendente.nome,
+            documento: participantePendente.documento,
+          },
         });
       } else {
         alert("Erro: " + (dados.mensagem || dados.erro));
@@ -130,12 +146,11 @@ export default function Scanner() {
     } catch (erro) {
       alert("Erro de rede ao confirmar presença.");
     } finally {
-
       setParticipantePendente(null);
       setTimeout(() => {
         setResultadoScan(null);
         if (scannerRef.current) scannerRef.current.resume();
-      }, 2000); 
+      }, 2000);
     }
   };
 
@@ -153,13 +168,20 @@ export default function Scanner() {
 
       <div className="leitor-wrapper">
         <div id="reader"></div>
-        
+
         {resultadoScan && !participantePendente && (
-          <div className={`resultado-alerta ${resultadoScan.status === 'erro' ? 'erro-scan' : 'sucesso-scan'}`}>
-            <h2>{resultadoScan.status === 'erro' ? 'Erro:' : 'Ok:'} {resultadoScan.mensagem}</h2>
-            {resultadoScan.status === 'erro' && (
+          <div
+            className={`resultado-alerta ${resultadoScan.status === "erro" ? "erro-scan" : "sucesso-scan"}`}
+          >
+            <h2>
+              {resultadoScan.status === "erro" ? "Erro:" : "Ok:"}{" "}
+              {resultadoScan.mensagem}
+            </h2>
+            {resultadoScan.status === "erro" && (
               <div className="resultado-dados">
-                <p><strong>Nome:</strong> {resultadoScan.dados.nome}</p>
+                <p>
+                  <strong>Nome:</strong> {resultadoScan.dados.nome}
+                </p>
               </div>
             )}
           </div>
@@ -170,23 +192,29 @@ export default function Scanner() {
         <div className="modal-foto-overlay">
           <div className="modal-foto-content">
             <h3>Confirme a Identidade</h3>
-            
-            <img 
-              src={participantePendente.foto} 
-              alt={`Foto de ${participantePendente.nome}`} 
+
+            <img
+              src={participantePendente.foto}
+              alt={`Foto de ${participantePendente.nome}`}
               className="participante-foto-preview"
             />
-            
+
             <div className="participante-info">
               <h2>{participantePendente.nome}</h2>
               <p>Documento: {participantePendente.documento}</p>
             </div>
 
             <div className="modal-botoes">
-              <button className="btn-confirmar-presenca" onClick={handleConfirmarPresenca}>
+              <button
+                className="btn-confirmar-presenca"
+                onClick={handleConfirmarPresenca}
+              >
                 Sim, Confirmar Presença
               </button>
-              <button className="btn-cancelar-presenca" onClick={handleCancelar}>
+              <button
+                className="btn-cancelar-presenca"
+                onClick={handleCancelar}
+              >
                 Cancelar / Recusar
               </button>
             </div>

@@ -254,7 +254,7 @@ export default function EditarEvento() {
           
           <div style={{ display: 'flex', gap: '10px' }}>
             {isDonoOuAdmin && (
-              <button type="button" onClick={handleAdicionarStaff} className="btn-admin-submit" style={{ backgroundColor: '#10b981' }}>
+              <button type="button" onClick={handleAdicionarStaff} className="btn-admin-submit btn-adicionar-staff" style={{ backgroundColor: '#10b981' }}>
                 + Adicionar Ajudante
               </button>
             )}

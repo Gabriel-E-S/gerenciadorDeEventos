@@ -37,7 +37,7 @@ export default function App() {
             } />
 
             <Route path="/scanner" element={
-              <ProtectedRoute perfisPermitidos={['ORGANIZADOR', 'ADMINISTRADOR']}>
+              <ProtectedRoute >
                 <Scanner />
               </ProtectedRoute>
             } />
