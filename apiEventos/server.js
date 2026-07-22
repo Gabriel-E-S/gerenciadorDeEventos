@@ -44,11 +44,11 @@ const verificarDonoOuAdmin = async (id_usuario_logado, perfil_logado, id_evento)
     
     if (perfil_logado === 'ADMINISTRADOR') return true;
 
-    const [linhas] = await db.execute('SELECT id_usuario_gerente FROM Evento WHERE id_evento = ?', [id_evento]);
+    const [linhas] = await db.execute('SELECT idOrganizador FROM Evento WHERE id_evento = ?', [id_evento]);
     
     if (linhas.length === 0) return false;
 
-    return Number(linhas[0].id_usuario_gerente) === Number(id_usuario_logado);
+    return Number(linhas[0].idOrganizador) === Number(id_usuario_logado);
 };
 
 app.get('/api/ingresso', verificarToken, (req, res) => {
@@ -233,6 +233,9 @@ app.post('/api/login', async (req, res) => {
             { expiresIn: '8h' }     
         );
 
+        const [equipe] = await db.execute('SELECT id_evento FROM EquipeEvento WHERE id_usuario = ? LIMIT 1', [usuario.id_usuario]);
+        const isStaff = equipe.length > 0;
+
         res.status(200).json({
             mensagem: "Login realizado com sucesso!",
             token: tokenSessao,
@@ -241,6 +244,7 @@ app.post('/api/login', async (req, res) => {
                 nome: usuario.nome,
                 email: usuario.email,
                 perfil: usuario.tipoPerfil,
+                isStaff: isStaff,
                 documento: usuario.cpf || usuario.ra
             }
         });
@@ -252,25 +256,24 @@ app.post('/api/login', async (req, res) => {
 });
 
 app.post('/api/eventos', verificarToken, async (req, res) => {
-    const { titulo, descricao, dataInicio, dataFim, local, numeroVagas } = req.body;
-    const id_usuario_gerente = req.usuario.id; 
+    const { titulo, descricao, dataInicio, dataFim, local, numeroVagas, idOrganizador } = req.body;
     const perfil = req.usuario.perfil;
 
-    if (perfil !== 'ORGANIZADOR' && perfil !== 'ADMINISTRADOR') {
-        return res.status(403).json({ erro: "Acesso negado. Apenas organizadores podem criar eventos." });
+    if (perfil !== 'ADMINISTRADOR') {
+        return res.status(403).json({ erro: "Acesso negado. Apenas administradores podem criar eventos." });
     }
 
-    if (!titulo || !dataInicio || !dataFim) {
-        return res.status(400).json({ erro: "Título, data de início e data de fim são obrigatórios." });
+    if (!titulo || !dataInicio || !dataFim || !idOrganizador) {
+        return res.status(400).json({ erro: "Título, datas e Organizador são obrigatórios." });
     }
 
     try {
         const query = `
             INSERT INTO Evento (id_usuario_gerente, titulo, descricao, dataInicio, dataFim, local, numeroVagas)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-        `;
+        `; 
         const [result] = await db.execute(query, [
-            id_usuario_gerente, titulo, descricao || null, dataInicio, dataFim, local || null, numeroVagas || null
+            idOrganizador, titulo, descricao || null, dataInicio, dataFim, local || null, numeroVagas || null
         ]);
         
         res.status(201).json({ mensagem: "Evento criado com sucesso!", id_evento: result.insertId });
@@ -278,14 +281,41 @@ app.post('/api/eventos', verificarToken, async (req, res) => {
         console.error("Erro ao criar evento:", erro);
         
         const msgErro = erro.sqlMessage || erro.message || "";
-        if (msgErro.includes('chk_evento_datas')) {
-            return res.status(400).json({ erro: "A data e hora de fim do evento não podem ser anteriores ao início." });
-        }
-        if (msgErro.includes('numeroVagas')) {
-            return res.status(400).json({ erro: "O número de vagas deve ser maior que zero." });
-        }
+        if (msgErro.includes('chk_evento_datas')) return res.status(400).json({ erro: "A data de fim não pode ser anterior ao início." });
+        if (msgErro.includes('numeroVagas')) return res.status(400).json({ erro: "O número de vagas deve ser maior que zero." });
 
         res.status(500).json({ erro: "Erro interno do servidor: " + msgErro });
+    }
+});
+
+app.get('/api/organizadores', verificarToken, async (req, res) => {
+    if (req.usuario.perfil !== 'ADMINISTRADOR') return res.status(403).json({ erro: "Acesso negado." });
+    try {
+        const [organizadores] = await db.execute('SELECT id_usuario, nome, email FROM Usuario WHERE tipoPerfil = "ORGANIZADOR"');
+        res.status(200).json(organizadores);
+    } catch (erro) {
+        res.status(500).json({ erro: "Erro ao buscar organizadores." });
+    }
+});
+
+app.post('/api/eventos/:id/equipe', verificarToken, async (req, res) => {
+    const id_evento = req.params.id;
+    const { email } = req.body;
+
+    const autorizado = await verificarDonoOuAdmin(req.usuario.id, req.usuario.perfil, id_evento);
+    if (!autorizado) return res.status(403).json({ erro: "Apenas o organizador do evento pode adicionar equipe." });
+
+    try {
+        const [usuarios] = await db.execute('SELECT id_usuario, nome FROM Usuario WHERE email = ?', [email]);
+        if (usuarios.length === 0) return res.status(404).json({ erro: "Usuário não encontrado. Peça para a pessoa criar uma conta no sistema primeiro." });
+        
+        const id_novo_staff = usuarios[0].id_usuario;
+
+        await db.execute('INSERT IGNORE INTO EquipeEvento (id_evento, id_usuario) VALUES (?, ?)', [id_evento, id_novo_staff]);
+        
+        res.status(200).json({ mensagem: `${usuarios[0].nome} agora faz parte do Staff do evento!` });
+    } catch (erro) {
+        res.status(500).json({ erro: "Erro ao adicionar membro à equipe." });
     }
 });
 
@@ -562,7 +592,7 @@ app.get('/api/meus-ingressos', verificarToken, async (req, res) => {
 
 app.post('/api/scanner/ler', verificarToken, async (req, res) => {
     const { token_lido } = req.body;
-    const id_organizador = req.usuario.id; 
+    const idOrganizador = req.usuario.id; 
     const perfil_organizador = req.usuario.perfil;
 
     let id_inscricao;
@@ -574,9 +604,9 @@ app.post('/api/scanner/ler', verificarToken, async (req, res) => {
 
     try {
         
-        const queryToken = `
+            const queryToken = `
             SELECT ia.id_inscricaoAtividade, u.nome AS nome_participante, u.ra AS ra_participante, 
-                   u.fotoUrl, a.data, a.horarioInicio, a.horarioFim, e.id_usuario_gerente
+                   u.fotoUrl, a.data, a.horarioInicio, a.horarioFim, e.id_usuario_gerente, e.id_evento
             FROM InscricaoAtividade ia
             JOIN Atividade a ON ia.id_atividade = a.id_atividade
             JOIN Evento e ON a.id_evento = e.id_evento
@@ -588,9 +618,21 @@ app.post('/api/scanner/ler', verificarToken, async (req, res) => {
         if (resultados.length === 0) return res.status(404).json({ status: "erro", mensagem: "Inscrição não encontrada." });
         const info = resultados[0];
 
-        if (perfil_organizador !== 'ADMINISTRADOR' && Number(info.id_usuario_gerente) !== Number(id_organizador)) {
-            return res.status(403).json({ status: "erro", mensagem: "Acesso negado para este evento." });
+        let autorizado = false;
+        
+        if (perfil_organizador === 'ADMINISTRADOR') {
+            autorizado = true; 
+        } else if (Number(info.id_usuario_gerente) === Number(id_organizador)) {
+            autorizado = true; 
+        } else {
+            const [staff] = await db.execute('SELECT * FROM EquipeEvento WHERE id_evento = ? AND id_usuario = ?', [info.id_evento, id_organizador]);
+            if (staff.length > 0) autorizado = true;
         }
+
+        if (!autorizado) {
+            return res.status(403).json({ status: "erro", mensagem: "Você não faz parte da organização deste evento." });
+        }
+
 
         const TOLERANCIA = 15; 
         const dataAtividadeStr = new Date(info.data).toISOString().split('T')[0];
@@ -621,11 +663,11 @@ app.post('/api/scanner/ler', verificarToken, async (req, res) => {
 
 app.post('/api/scanner/confirmar', verificarToken, async (req, res) => {
     const { id_inscricaoAtividade } = req.body;
-    const id_organizador = req.usuario.id;
+    const idOrganizador = req.usuario.id;
 
     try {
-        await db.execute('INSERT INTO RegistroPresenca (id_inscricaoAtividade, id_organizador) VALUES (?, ?)', 
-        [id_inscricaoAtividade, id_organizador]);
+        await db.execute('INSERT INTO RegistroPresenca (id_inscricaoAtividade, idOrganizador) VALUES (?, ?)', 
+        [id_inscricaoAtividade, idOrganizador]);
         
         res.status(200).json({ mensagem: "Presença confirmada e salva com sucesso!" });
     } catch (erro) {
@@ -719,7 +761,7 @@ app.get('/api/eventos/:id/relatorio', verificarToken, async (req, res) => {
             JOIN Usuario u ON ia.id_usuario = u.id_usuario
             JOIN Atividade a ON ia.id_atividade = a.id_atividade
             LEFT JOIN RegistroPresenca rp ON ia.id_inscricaoAtividade = rp.id_inscricaoAtividade
-            LEFT JOIN Usuario uo ON rp.id_organizador = uo.id_usuario
+            LEFT JOIN Usuario uo ON rp.idOrganizador = uo.id_usuario
             WHERE a.id_evento = ?
             ORDER BY a.data ASC, a.horarioInicio ASC, u.nome ASC
         `;

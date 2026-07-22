@@ -8,6 +8,8 @@ export default function NovoEvento() {
   const navigate = useNavigate();
   const tokenSessao = localStorage.getItem('tokenSessao');
   const [idEventoCriado, setIdEventoCriado] = useState(null);
+  const [idOrganizador, setIdOrganizador] = useState('');
+  const [listaOrganizadores, setListaOrganizadores] = useState([]); 
 
   const [eventoData, setEventoData] = useState({
     titulo: '', descricao: '', dataInicio: '', dataFim: '', local: '', numeroVagas: ''
@@ -16,6 +18,18 @@ export default function NovoEvento() {
   const [atividadeData, setAtividadeData] = useState({
     tituloAtividade: '', dataAtividade: '', horaInicio: '', horaFim: '', capacidade: ''
   });
+
+  useEffect(() => {
+    async function fetchOrganizadores() {
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/organizadores`, {
+            headers: { 'Authorization': `Bearer ${tokenSessao}` }
+        });
+        const data = await res.json();
+        setListaOrganizadores(data);
+        if(data.length > 0) setIdOrganizador(data[0].id_usuario); 
+    }
+    fetchOrganizadores();
+  }, []);
 
   const handleCriarEvento = async (e) => {
     e.preventDefault();
@@ -84,6 +98,7 @@ export default function NovoEvento() {
           setEventoData={setEventoData}
           onSubmit={handleCriarEvento}
           isBloqueado={idEventoCriado !== null}
+          listaOrganizadores={listaOrganizadores}
           textoBotao="Salvar Evento"
         />
 

@@ -5,7 +5,8 @@ export default function FormularioEvento({
   setEventoData,
   onSubmit,
   isBloqueado,
-  textoBotao
+  textoBotao,
+  listaOrganizadores = [] 
 }) {
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -19,28 +20,48 @@ export default function FormularioEvento({
         <input 
           type="text" 
           name="titulo"
-          value={eventoData.titulo} 
+          value={eventoData.titulo || ''} 
           onChange={handleChange} 
           disabled={isBloqueado} 
           required 
         />
       </div>
+
+      <div className="form-group">
+        <label>Organizador Responsável</label>
+        <select 
+          name="idOrganizador" 
+          value={eventoData.idOrganizador || ''} 
+          onChange={handleChange} 
+          disabled={isBloqueado} 
+          required
+        >
+          <option value="" disabled>Selecione um organizador...</option>
+          {listaOrganizadores.map(org => (
+            <option key={org.id_usuario} value={org.id_usuario}>
+              {org.nome} ({org.email})
+            </option>
+          ))}
+        </select>
+      </div>
+
       <div className="form-group">
         <label>Descrição</label>
         <textarea 
           name="descricao"
-          value={eventoData.descricao} 
+          value={eventoData.descricao || ''} 
           onChange={handleChange} 
           disabled={isBloqueado} 
         />
       </div>
+      
       <div className="form-row">
         <div className="form-group">
           <label>Data/Hora Início</label>
           <input 
             type="datetime-local" 
             name="dataInicio"
-            value={eventoData.dataInicio} 
+            value={eventoData.dataInicio || ''} 
             onChange={handleChange} 
             disabled={isBloqueado} 
             required 
@@ -51,20 +72,21 @@ export default function FormularioEvento({
           <input 
             type="datetime-local" 
             name="dataFim"
-            value={eventoData.dataFim} 
+            value={eventoData.dataFim || ''} 
             onChange={handleChange} 
             disabled={isBloqueado} 
             required 
           />
         </div>
       </div>
+      
       <div className="form-row">
         <div className="form-group">
           <label>Local</label>
           <input 
             type="text" 
             name="local"
-            value={eventoData.local} 
+            value={eventoData.local || ''} 
             onChange={handleChange} 
             disabled={isBloqueado} 
           />
@@ -74,12 +96,13 @@ export default function FormularioEvento({
           <input 
             type="number" 
             name="numeroVagas"
-            value={eventoData.numeroVagas} 
+            value={eventoData.numeroVagas || ''} 
             onChange={handleChange} 
             disabled={isBloqueado} 
           />
         </div>
       </div>
+      
       {!isBloqueado && (
         <button type="submit" className="btn-admin-submit">
           {textoBotao}

@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { AuthContext } from '../../context/AuthContext'; 
 import Loader from '../../components/UI/Loader';
 import FormularioEvento from '../../components/Admin/FormularioEvento';
 import FormularioAtividade from '../../components/Admin/FormularioAtividade';
@@ -9,12 +10,15 @@ export default function EditarEvento() {
   const { id } = useParams(); 
   const navigate = useNavigate();
   const tokenSessao = localStorage.getItem('tokenSessao');
+  
+  const { usuarioLogado } = useContext(AuthContext);
 
   const [eventoData, setEventoData] = useState({
-    titulo: '', descricao: '', dataInicio: '', dataFim: '', local: '', numeroVagas: ''
+    titulo: '', descricao: '', dataInicio: '', dataFim: '', local: '', numeroVagas: '', idOrganizador: ''
   });
   
   const [listaAtividades, setListaAtividades] = useState([]);
+  const [listaOrganizadores, setListaOrganizadores] = useState([]); 
   const [carregando, setCarregando] = useState(true);
 
   const [atividadeEditandoId, setAtividadeEditandoId] = useState(null); 
@@ -43,6 +47,7 @@ export default function EditarEvento() {
 
   const carregarDados = async () => {
     try {
+      
       const resEvento = await fetch(`https://gerenciadordeeventos.onrender.com/api/eventos/${id}`);
       if (resEvento.ok) {
         const dados = await resEvento.json();
@@ -52,7 +57,8 @@ export default function EditarEvento() {
           dataInicio: formatarDataParaInput(dados.dataInicio),
           dataFim: formatarDataParaInput(dados.dataFim),
           local: dados.local || '',
-          numeroVagas: dados.numeroVagas || ''
+          numeroVagas: dados.numeroVagas || '',
+          idOrganizador: dados.id_usuario_gerente || '' 
         });
       } else {
         alert("Evento não encontrado.");
@@ -60,15 +66,19 @@ export default function EditarEvento() {
         return;
       }
 
-      const resAtividades = await fetch(`https://gerenciadordeeventos.onrender.com/api/eventos/${id}/atividades`);
-      if (resAtividades.ok) {
-        setListaAtividades(await resAtividades.json());
+      if (usuarioLogado?.perfil === 'ADMINISTRADOR') {
+        const resOrg = await fetch('https://gerenciadordeeventos.onrender.com/api/organizadores', {
+          headers: { 'Authorization': `Bearer ${tokenSessao}` }
+        });
+        if (resOrg.ok) {
+          setListaOrganizadores(await resOrg.json());
+        }
       }
+      const resAtividades = await fetch(`https://gerenciadordeeventos.onrender.com/api/eventos/${id}/atividades`);
+      if (resAtividades.ok) setListaAtividades(await resAtividades.json());
 
       const resMetricas = await fetch(`https://gerenciadordeeventos.onrender.com/api/eventos/${id}/estatisticas`);
-        if (resMetricas.ok) {
-          setMetricas(await resMetricas.json());
-        }
+      if (resMetricas.ok) setMetricas(await resMetricas.json());
 
     } catch (erro) {
       console.error("Erro ao buscar dados:", erro);
@@ -79,7 +89,31 @@ export default function EditarEvento() {
 
   useEffect(() => {
     carregarDados();
-  }, [id, navigate]);
+  }, [id, navigate, usuarioLogado]);
+
+  const handleAdicionarStaff = async () => {
+    const emailStaff = prompt("Digite o e-mail do aluno que vai ajudar no Scanner:");
+    
+    if (!emailStaff) return; 
+
+    try {
+        const res = await fetch(`https://gerenciadordeeventos.onrender.com/api/eventos/${id}/equipe`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${tokenSessao}` 
+            },
+            body: JSON.stringify({ email: emailStaff })
+        });
+        const data = await res.json();
+        
+        if(res.ok) alert("ok " + data.mensagem);
+        else alert("erro " + data.erro);
+
+    } catch (err) {
+        alert("Erro de conexão ao adicionar Staff.");
+    }
+  };
 
   const handleSalvarEvento = async (e) => {
     e.preventDefault();
@@ -207,6 +241,8 @@ export default function EditarEvento() {
     } catch (erro) { alert("Erro ao tentar baixar o relatório."); }
   };
 
+  const isDonoOuAdmin = usuarioLogado?.perfil === 'ADMINISTRADOR' || Number(usuarioLogado?.id) === Number(eventoData?.idOrganizador);
+
   if (carregando) return <Loader mensagem="Carregando painel de edição..." />;
 
   return (
@@ -215,9 +251,17 @@ export default function EditarEvento() {
         
         <div className="editar-header-top">
           <h2>Editar {eventoData.titulo}</h2>
-          <button type="button" onClick={handleExportarRelatorio} className="btn-admin-submit btn-exportar">
-            Exportar Presenças (CSV)
-          </button>
+          
+          <div style={{ display: 'flex', gap: '10px' }}>
+            {isDonoOuAdmin && (
+              <button type="button" onClick={handleAdicionarStaff} className="btn-admin-submit" style={{ backgroundColor: '#10b981' }}>
+                + Adicionar Ajudante
+              </button>
+            )}
+            <button type="button" onClick={handleExportarRelatorio} className="btn-admin-submit btn-exportar">
+              Exportar Presenças (CSV)
+            </button>
+          </div>
         </div>
 
         <div className="metricas-container">
@@ -251,6 +295,7 @@ export default function EditarEvento() {
           onSubmit={handleSalvarEvento}
           isBloqueado={false}
           textoBotao="Salvar Evento"
+          listaOrganizadores={listaOrganizadores} 
         />
 
         <div className="atividades-section">
