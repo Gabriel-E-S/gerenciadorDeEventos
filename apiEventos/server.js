@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const { MercadoPagoConfig, Payment } = require('mercadopago');
+
 require('dotenv').config(); 
 
 const db = require('./db'); 
@@ -9,6 +11,8 @@ const db = require('./db');
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
 
+const client = new MercadoPagoConfig({ accessToken: process.env.MP_ACCESS_TOKEN });
+const payment = new Payment(client);
 
 const app = express();
 app.use(cors());
@@ -514,15 +518,26 @@ app.post('/api/inscricao', verificarToken, async (req, res) => {
 
     try {
         const [atividadeRes] = await db.execute(
-            'SELECT capacidadeMaxima, data, horarioFim FROM Atividade WHERE id_atividade = ?', 
+            'SELECT id_evento, capacidadeMaxima, data, horarioFim FROM Atividade WHERE id_atividade = ?', 
             [id_atividade]
         );
         if (atividadeRes.length === 0) return res.status(404).json({ erro: "Atividade não encontrada." });
 
-        const { capacidadeMaxima, data, horarioFim } = atividadeRes[0];
+        const { id_evento, capacidadeMaxima, data, horarioFim } = atividadeRes[0];
+
+        const [ingressoRes] = await db.execute(
+            'SELECT status_pagamento FROM InscricaoEvento WHERE id_usuario = ? AND id_evento = ?',
+            [id_usuario, id_evento]
+        );
+
+        if (ingressoRes.length === 0 || ingressoRes[0].status_pagamento !== 'PAGO') {
+            return res.status(403).json({ 
+                erro: "Acesso bloqueado! Você precisa confirmar a inscrição/pagamento do Evento antes de escolher as atividades." 
+            });
+        }
 
         const dataFormatada = new Date(data).toISOString().split('T')[0];
-        const dataHoraFimAtividade = new Date(`${dataFormatada}T${horarioFim}-03:00`); // Foi preciso fazer isso pq o servidor está em fuso horário diferente ;/
+        const dataHoraFimAtividade = new Date(`${dataFormatada}T${horarioFim}-03:00`); 
         const agora = new Date();
 
         if (agora > dataHoraFimAtividade) {
@@ -546,6 +561,7 @@ app.post('/api/inscricao', verificarToken, async (req, res) => {
                 return res.status(403).json({ erro: "Lotação esgotada! Não há mais vagas para esta atividade." });
             }
         }
+        
         const query = 'INSERT INTO InscricaoAtividade (id_usuario, id_atividade) VALUES (?, ?)';
         await db.execute(query, [id_usuario, id_atividade]);
 
@@ -910,6 +926,117 @@ app.put('/api/admin/usuarios/:id/perfil', verificarToken, async (req, res) => {
         res.status(500).json({ erro: "Erro interno ao atualizar o perfil do usuário." });
     }
 });
+
+// ==========================================
+// ROTA DE PAGAMENTO PIX (MERCADO PAGO)
+// ==========================================
+
+app.post('/api/pagamentos/pix', verificarToken, async (req, res) => {
+    
+    const { id_evento } = req.body;
+    const id_usuario = req.usuario.id;
+
+    if (!id_evento) return res.status(400).json({ erro: "ID do evento é obrigatório." });
+
+    try {
+        
+        const [inscricaoExiste] = await db.execute(
+            'SELECT status_pagamento FROM InscricaoEvento WHERE id_usuario = ? AND id_evento = ?',
+            [id_usuario, id_evento]
+        );
+
+        if (inscricaoExiste.length > 0) {
+            const status = inscricaoExiste[0].status_pagamento;
+            if (status === 'PAGO') return res.status(400).json({ erro: "Você já está inscrito neste evento!" });
+            if (status === 'PENDENTE') return res.status(400).json({ erro: "Você já tem um PIX pendente para este evento. Pague-o ou cancele-o." });
+        }
+
+        const [eventos] = await db.execute('SELECT titulo, preco FROM Evento WHERE id_evento = ?', [id_evento]);
+        if (eventos.length === 0) return res.status(404).json({ erro: "Evento não encontrado." });
+        
+        const evento = eventos[0];
+        const preco = Number(evento.preco);
+
+        if (preco === 0) {
+            await db.execute(
+                'INSERT INTO InscricaoEvento (id_usuario, id_evento, valor_pago, status_pagamento) VALUES (?, ?, ?, ?)',
+                [id_usuario, id_evento, 0.00, 'PAGO']
+            );
+            return res.status(200).json({ status: 'gratis', mensagem: "Inscrição gratuita realizada com sucesso!" });
+        }
+
+        const [usuarios] = await db.execute('SELECT nome, email FROM Usuario WHERE id_usuario = ?', [id_usuario]);
+        const usuario = usuarios[0];
+        
+        const idempotencyKey = `evento_${id_evento}_user_${id_usuario}_${Date.now()}`; 
+
+        const paymentData = {
+            body: {
+                transaction_amount: preco,
+                description: `Inscrição: ${evento.titulo}`,
+                payment_method_id: 'pix',
+                payer: {
+                    email: usuario.email,
+                    first_name: usuario.nome.split(' ')[0] 
+                },
+            },
+            requestOptions: { idempotencyKey }
+        };
+
+        const resultado = await payment.create(paymentData);
+
+        const mp_id = resultado.id;
+        const qr_code_copia_cola = resultado.point_of_interaction.transaction_data.qr_code;
+        const qr_code_imagem = resultado.point_of_interaction.transaction_data.qr_code_base64;
+
+        await db.execute(
+            'INSERT INTO InscricaoEvento (id_usuario, id_evento, valor_pago, status_pagamento, id_transacao_mp) VALUES (?, ?, ?, ?, ?)',
+            [id_usuario, id_evento, preco, 'PENDENTE', mp_id]
+        );
+
+        res.status(201).json({
+            status: 'pendente',
+            mensagem: "Cobrança PIX gerada com sucesso!",
+            qr_code: qr_code_copia_cola,
+            qr_code_base64: qr_code_imagem,
+            id_transacao: mp_id
+        });
+
+    } catch (erro) {
+        console.error("Erro ao gerar PIX no Mercado Pago:", erro);
+        res.status(500).json({ erro: "Erro interno ao gerar o pagamento." });
+    }
+});
+
+app.post('/api/pagamentos/webhook', async (req, res) => {
+
+    const action = req.body.action || req.body.type;
+    const paymentId = req.body?.data?.id || req.query.id;
+
+    try {
+        
+        if (action === 'payment.created' || action === 'payment.updated' || req.query.topic === 'payment') {
+            
+            const statusOficial = await payment.get({ id: paymentId });
+
+            if (statusOficial.status === 'approved') {
+                
+                const query = 'UPDATE InscricaoEvento SET status_pagamento = ? WHERE id_transacao_mp = ?';
+                const [resultado] = await db.execute(query, ['PAGO', paymentId]);
+                
+                if (resultado.affectedRows > 0) {
+                    console.log(`SUCESSO: Pagamento PIX ${paymentId} APROVADO! Vaga liberada.`);
+                }
+            }
+        }
+        res.status(200).send("Notificação recebida.");
+
+    } catch (erro) {
+        console.error("Erro ao processar o Webhook:", erro);
+        res.status(500).send("Erro interno");
+    }
+});
+
 
 const PORT = process.env.DB_PORT;
 app.listen(PORT, () => {
