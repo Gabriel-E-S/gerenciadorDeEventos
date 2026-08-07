@@ -2,7 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const { MercadoPagoConfig, Payment } = require('mercadopago');
+const { MercadoPagoConfig, Payment, Preference } = require('mercadopago');
+
 
 require('dotenv').config(); 
 
@@ -931,15 +932,13 @@ app.put('/api/admin/usuarios/:id/perfil', verificarToken, async (req, res) => {
 // ROTA DE PAGAMENTO PIX (MERCADO PAGO)
 // ==========================================
 
-app.post('/api/pagamentos/pix', verificarToken, async (req, res) => {
-    
+app.post('/api/pagamentos/checkout-pro', verificarToken, async (req, res) => {
     const { id_evento } = req.body;
     const id_usuario = req.usuario.id;
 
     if (!id_evento) return res.status(400).json({ erro: "ID do evento é obrigatório." });
 
     try {
-        
         const [inscricaoExiste] = await db.execute(
             'SELECT status_pagamento FROM InscricaoEvento WHERE id_usuario = ? AND id_evento = ?',
             [id_usuario, id_evento]
@@ -948,7 +947,6 @@ app.post('/api/pagamentos/pix', verificarToken, async (req, res) => {
         if (inscricaoExiste.length > 0) {
             const status = inscricaoExiste[0].status_pagamento;
             if (status === 'PAGO') return res.status(400).json({ erro: "Você já está inscrito neste evento!" });
-            if (status === 'PENDENTE') return res.status(400).json({ erro: "Você já tem um PIX pendente para este evento. Pague-o ou cancele-o." });
         }
 
         const [eventos] = await db.execute('SELECT titulo, preco FROM Evento WHERE id_evento = ?', [id_evento]);
@@ -957,102 +955,110 @@ app.post('/api/pagamentos/pix', verificarToken, async (req, res) => {
         const evento = eventos[0];
         const preco = Number(evento.preco);
 
+        // Se for gratuito, já aprova direto sem Mercado Pago
         if (preco === 0) {
-            await db.execute(
-                'INSERT INTO InscricaoEvento (id_usuario, id_evento, valor_pago, status_pagamento) VALUES (?, ?, ?, ?)',
-                [id_usuario, id_evento, 0.00, 'PAGO']
-            );
+            if (inscricaoExiste.length === 0) {
+                await db.execute(
+                    'INSERT INTO InscricaoEvento (id_usuario, id_evento, valor_pago, status_pagamento) VALUES (?, ?, ?, ?)',
+                    [id_usuario, id_evento, 0.00, 'PAGO']
+                );
+            } else {
+                await db.execute(
+                    'UPDATE InscricaoEvento SET status_pagamento = ? WHERE id_usuario = ? AND id_evento = ?',
+                    ['PAGO', id_usuario, id_evento]
+                );
+            }
             return res.status(200).json({ status: 'gratis', mensagem: "Inscrição gratuita realizada com sucesso!" });
         }
 
         const [usuarios] = await db.execute('SELECT nome, email FROM Usuario WHERE id_usuario = ?', [id_usuario]);
         const usuario = usuarios[0];
-        
-        const idempotencyKey = `evento_${id_evento}_user_${id_usuario}_${Date.now()}`; 
 
-        const paymentData = {
+        // Se não existir no banco ainda, cria como PENDENTE para reservar a vaga
+        if (inscricaoExiste.length === 0) {
+            await db.execute(
+                'INSERT INTO InscricaoEvento (id_usuario, id_evento, valor_pago, status_pagamento) VALUES (?, ?, ?, ?)',
+                [id_usuario, id_evento, preco, 'PENDENTE']
+            );
+        }
+
+        const preference = new Preference(client);
+
+        const respostaMP = await preference.create({
             body: {
-                transaction_amount: preco,
-                description: `Inscrição: ${evento.titulo}`,
-                payment_method_id: 'pix',
+                items: [
+                    {
+                        id: String(id_evento),
+                        title: `Inscrição: ${evento.titulo}`,
+                        quantity: 1,
+                        unit_price: preco,
+                        currency_id: 'BRL'
+                    }
+                ],
                 payer: {
-                    email: usuario.email,
-                    first_name: usuario.nome.split(' ')[0] 
+                    name: usuario.nome.split(' ')[0],
+                    email: usuario.email
                 },
-            },
-            requestOptions: { idempotencyKey }
-        };
+                
+                back_urls: {
+                    success: `https://aki-xjvb.onrender.com/eventos/${id_evento}`,
+                    failure: `https://aki-xjvb.onrender.com/eventos/${id_evento}`,
+                    pending: `https://aki-xjvb.onrender.com/eventos/${id_evento}`
+                },
+                auto_return: 'approved',
+                
+                external_reference: JSON.stringify({ u: id_usuario, e: id_evento })
+            }
+        });
 
-        const resultado = await payment.create(paymentData);
-
-        const mp_id = resultado.id;
-        const qr_code_copia_cola = resultado.point_of_interaction.transaction_data.qr_code;
-        const qr_code_imagem = resultado.point_of_interaction.transaction_data.qr_code_base64;
-
-        await db.execute(
-            'INSERT INTO InscricaoEvento (id_usuario, id_evento, valor_pago, status_pagamento, id_transacao_mp) VALUES (?, ?, ?, ?, ?)',
-            [id_usuario, id_evento, preco, 'PENDENTE', mp_id]
-        );
-
-        res.status(201).json({
-            status: 'pendente',
-            mensagem: "Cobrança PIX gerada com sucesso!",
-            qr_code: qr_code_copia_cola,
-            qr_code_base64: qr_code_imagem,
-            id_transacao: mp_id
+        res.status(200).json({ 
+            status: 'pendente', 
+            link_pagamento: respostaMP.init_point 
         });
 
     } catch (erro) {
-        console.error("Erro ao gerar PIX no Mercado Pago:", erro);
+        console.error("Erro ao gerar link de pagamento:", erro);
         res.status(500).json({ erro: "Erro interno ao gerar o pagamento." });
     }
 });
 
 // ==========================================
-// ROTA DE WEBHOOK (Versão Debug)
+// WEBHOOK
 // ==========================================
-app.post('/api/pagamentos/webhook', async (req, res) => {
-    
-    console.log("🔔 [WEBHOOK] Batida na porta do webhook!");
-    console.log("📦 Body recebido:", req.body);
 
+app.post('/api/pagamentos/webhook', async (req, res) => {
     const action = req.body.action || req.body.type;
     const paymentId = req.body?.data?.id || req.query.id;
-
-    console.log(`🔍 Ação lida: ${action} | ID extraído: ${paymentId}`);
 
     try {
         if (action === 'payment.created' || action === 'payment.updated' || req.query.topic === 'payment') {
             
-            // FAKE STATUS para testarmos o fluxo
-            const statusOficial = { status: 'approved' };
+            
+            const statusOficial = await payment.get({ id: paymentId });
 
             if (statusOficial.status === 'approved') {
-                console.log(`⏳ Tentando atualizar o banco para o ID: ${paymentId}...`);
                 
-                const query = 'UPDATE InscricaoEvento SET status_pagamento = ? WHERE id_transacao_mp = ?';
-                // Convertendo o paymentId para Número por garantia contra o MySQL
-                const [resultado] = await db.execute(query, ['PAGO', Number(paymentId)]);
-                
-                console.log("📊 Resposta do Banco:", resultado);
+                const referencia = statusOficial.external_reference;
+                if (referencia) {
+                    const dadosRef = JSON.parse(referencia);
+                    const id_usuario = dadosRef.u;
+                    const id_evento = dadosRef.e;
 
-                if (resultado.affectedRows > 0) {
-                    console.log(`🎉 SUCESSO REAL: Vaga liberada no banco para o ID ${paymentId}!`);
-                } else {
-                    console.log("⚠️ AVISO: O banco rodou sem erros, mas não achou esse ID para atualizar!");
+                    const query = 'UPDATE InscricaoEvento SET status_pagamento = ?, id_transacao_mp = ? WHERE id_usuario = ? AND id_evento = ?';
+                    await db.execute(query, ['PAGO', paymentId, id_usuario, id_evento]);
+                    
+                    console.log(`✅ SUCESSO: Aluno ${id_usuario} pagou o Evento ${id_evento} via MP!`);
                 }
             }
-        } else {
-            console.log("⏩ Ignorado: A 'action' não bateu com a condição do IF.");
         }
-        
         res.status(200).send("Notificação recebida.");
 
     } catch (erro) {
-        console.error("❌ Erro ao processar o Webhook:", erro);
+        console.error("Erro ao processar o Webhook:", erro);
         res.status(500).send("Erro interno");
     }
 });
+
 
 app.get('/api/eventos/:id/status-pagamento', verificarToken, async (req, res) => {
     try {
@@ -1084,6 +1090,7 @@ app.get('/api/eventos/:id/status-pagamento', verificarToken, async (req, res) =>
                     return res.status(200).json({ status: status }); 
                 }
             }
+
 
             return res.status(200).json({ status: status });
         } else {

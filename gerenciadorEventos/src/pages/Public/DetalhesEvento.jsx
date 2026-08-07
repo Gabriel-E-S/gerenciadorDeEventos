@@ -82,7 +82,7 @@ export default function DetalhesEvento() {
     buscarDados();
   }, [id, navigate]);
 
-  const handleGerarPix = async () => {
+  const handleComprar = async () => {
     const tokenSessao = localStorage.getItem('tokenSessao');
     if (!tokenSessao) {
       alert("Você precisa fazer login para garantir sua inscrição!");
@@ -92,7 +92,7 @@ export default function DetalhesEvento() {
 
     setCarregandoPix(true);
     try {
-      const resposta = await fetch('https://gerenciadordeeventos.onrender.com/api/pagamentos/pix', {
+      const resposta = await fetch('https://gerenciadordeeventos.onrender.com/api/pagamentos/checkout-pro', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -107,12 +107,9 @@ export default function DetalhesEvento() {
         if (dados.status === 'gratis') {
           alert("🎉 " + dados.mensagem);
           window.location.reload(); 
-        } else {
-          setDadosPix({
-            qr_code_base64: dados.qr_code_base64,
-            qr_code_copia_cola: dados.qr_code,
-            id_transacao: dados.id_transacao
-          });
+        } else if (dados.link_pagamento) {
+          
+          window.location.href = dados.link_pagamento;
         }
       } else {
         alert("Erro: " + dados.erro);
@@ -201,48 +198,23 @@ export default function DetalhesEvento() {
           <p className="detalhes-descricao">{evento.descricao || 'Nenhuma descrição detalhada fornecida.'}</p>
 
           <div className="area-pagamento-evento" style={{ marginTop: '30px' }}>
-      
             {statusPagamento === 'PAGO' ? (
               <div style={{ padding: '15px 30px', backgroundColor: 'var(--primary-blue)', color: 'white', borderRadius: '8px', fontWeight: 'bold', display: 'inline-block' }}>
                 Inscrição Confirmada
               </div>
-            ) : !dadosPix ? (
+            ) : (
               <button 
                 className="btn-admin-submit" 
-                onClick={handleGerarPix} 
+                onClick={handleComprar} 
                 disabled={carregandoPix}
                 style={{ backgroundColor: '#10b981', fontSize: '1.1rem', padding: '15px 30px', boxShadow: '0 4px 6px rgba(16, 185, 129, 0.2)' }}
               >
                 {carregandoPix 
-                  ? "Gerando cobrança..." 
+                  ? "Redirecionando..." 
                   : evento.preco > 0 
-                    ? `Garantir Inscrição (R$ ${Number(evento.preco).toFixed(2).replace('.', ',')})` 
+                    ? `Comprar Ingressos (R$ ${Number(evento.preco).toFixed(2).replace('.', ',')})` 
                     : "Garantir Inscrição (Gratuito)"}
               </button>
-            ) : (
-              <div className="caixa-pix-gerado" style={{ backgroundColor: '#ffffff', color: '#1e293b', padding: '25px', borderRadius: '12px', maxWidth: '450px', margin: '0 auto', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}>
-                <h3 style={{ color: '#10b981', margin: '0 0 10px 0' }}>Escaneie o QR Code para pagar</h3>
-                <p style={{ fontSize: '0.9rem', marginBottom: '15px' }}>O acesso às atividades será liberado automaticamente após a aprovação do pagamento.</p>
-                
-                <img 
-                  src={`data:image/jpeg;base64,${dadosPix.qr_code_base64}`} 
-                  alt="QR Code PIX" 
-                  style={{ width: '220px', height: '220px', margin: '0 auto', display: 'block', borderRadius: '8px', border: '1px solid #e2e8f0' }}
-                />
-                
-                <div style={{ marginTop: '20px', textAlign: 'left' }}>
-                  <p style={{ fontSize: '0.85rem', color: '#64748b', margin: '0 0 5px 0' }}>Ou use o PIX Copia e Cola:</p>
-                  <input 
-                    type="text" 
-                    value={dadosPix.qr_code_copia_cola} 
-                    readOnly 
-                    style={{ width: '100%', padding: '12px', marginBottom: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '0.85rem' }}
-                  />
-                  <button className="btn-concluir" onClick={copiarPix} style={{ width: '100%', backgroundColor: '#3b82f6' }}>
-                    Copiar Código
-                  </button>
-                </div>
-              </div>
             )}
           </div>
 
