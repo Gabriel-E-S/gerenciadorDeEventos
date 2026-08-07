@@ -29,7 +29,7 @@ export default function Auth() {
     try {
       const resposta = await fetch(`${apiUrl}/api/login`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }, // Login continua JSON
+        headers: { 'Content-Type': 'application/json' }, 
         body: JSON.stringify(dadosLogin)
       });
       const dados = await resposta.json();

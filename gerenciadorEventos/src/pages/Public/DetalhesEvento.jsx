@@ -185,13 +185,13 @@ export default function DetalhesEvento() {
                 style={{ backgroundColor: '#10b981', fontSize: '1.1rem', padding: '15px 30px', boxShadow: '0 4px 6px rgba(16, 185, 129, 0.2)' }}
               >
                 {carregandoPix 
-                  ? "Gerando cobrança segura..." 
+                  ? "Gerando cobrança..." 
                   : evento.preco > 0 
                     ? `Garantir Inscrição (R$ ${Number(evento.preco).toFixed(2).replace('.', ',')})` 
                     : "Garantir Inscrição (Gratuito)"}
               </button>
             ) : (
-              <div className="caixa-pix-gerado" style={{ backgroundColor: '#ffffff', color: '#1e293b', padding: '25px', border: '2px dashed #10b981', borderRadius: '12px', maxWidth: '450px', margin: '0 auto', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}>
+              <div className="caixa-pix-gerado" style={{ backgroundColor: '#ffffff', color: '#1e293b', padding: '25px', border: '2px  #10b981', borderRadius: '12px', maxWidth: '450px', margin: '0 auto', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}>
                 <h3 style={{ color: '#10b981', margin: '0 0 10px 0' }}>Escaneie o QR Code para pagar</h3>
                 <p style={{ fontSize: '0.9rem', marginBottom: '15px' }}>O acesso às atividades será liberado automaticamente após a aprovação do pagamento.</p>
                 

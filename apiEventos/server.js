@@ -1008,33 +1008,48 @@ app.post('/api/pagamentos/pix', verificarToken, async (req, res) => {
     }
 });
 
+// ==========================================
+// ROTA DE WEBHOOK (Versão Debug)
+// ==========================================
 app.post('/api/pagamentos/webhook', async (req, res) => {
+    
+    console.log("🔔 [WEBHOOK] Batida na porta do webhook!");
+    console.log("📦 Body recebido:", req.body);
 
     const action = req.body.action || req.body.type;
     const paymentId = req.body?.data?.id || req.query.id;
 
+    console.log(`🔍 Ação lida: ${action} | ID extraído: ${paymentId}`);
+
     try {
-        
         if (action === 'payment.created' || action === 'payment.updated' || req.query.topic === 'payment') {
             
-            //const statusOficial = await payment.get({ id: paymentId });
-
+            // FAKE STATUS para testarmos o fluxo
             const statusOficial = { status: 'approved' };
 
             if (statusOficial.status === 'approved') {
+                console.log(`⏳ Tentando atualizar o banco para o ID: ${paymentId}...`);
                 
                 const query = 'UPDATE InscricaoEvento SET status_pagamento = ? WHERE id_transacao_mp = ?';
-                const [resultado] = await db.execute(query, ['PAGO', paymentId]);
+                // Convertendo o paymentId para Número por garantia contra o MySQL
+                const [resultado] = await db.execute(query, ['PAGO', Number(paymentId)]);
                 
+                console.log("📊 Resposta do Banco:", resultado);
+
                 if (resultado.affectedRows > 0) {
-                    console.log(`SUCESSO: Pagamento PIX ${paymentId} APROVADO! Vaga liberada.`);
+                    console.log(`🎉 SUCESSO REAL: Vaga liberada no banco para o ID ${paymentId}!`);
+                } else {
+                    console.log("⚠️ AVISO: O banco rodou sem erros, mas não achou esse ID para atualizar!");
                 }
             }
+        } else {
+            console.log("⏩ Ignorado: A 'action' não bateu com a condição do IF.");
         }
+        
         res.status(200).send("Notificação recebida.");
 
     } catch (erro) {
-        console.error("Erro ao processar o Webhook:", erro);
+        console.error("❌ Erro ao processar o Webhook:", erro);
         res.status(500).send("Erro interno");
     }
 });
