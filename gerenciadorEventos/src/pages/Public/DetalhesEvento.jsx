@@ -15,9 +15,7 @@ export default function DetalhesEvento() {
   const [carregando, setCarregando] = useState(true);
   const [inscricoesUsuario, setInscricoesUsuario] = useState([]); 
 
-  const [dadosPix, setDadosPix] = useState(null);
-  const [carregandoPix, setCarregandoPix] = useState(false);
-  
+  const [carregandoCheckout, setCarregandoCheckout] = useState(false);
   const [statusPagamento, setStatusPagamento] = useState(null);
 
   useEffect(() => {
@@ -55,20 +53,8 @@ export default function DetalhesEvento() {
           });
           
           if (resStatus.ok) {
-            // ✅ CORREÇÃO AQUI: Lemos o JSON inteiro para a variável dadosStatus
             const dadosStatus = await resStatus.json();
-            
-            // ✅ Atualizamos o estado
             setStatusPagamento(dadosStatus.status);
-
-            // ✅ Agora o React entende quem é dadosStatus e consegue ler o QR Code
-            if (dadosStatus.status === 'PENDENTE' && dadosStatus.qr_code) {
-              setDadosPix({
-                qr_code_base64: dadosStatus.qr_code_base64,
-                qr_code_copia_cola: dadosStatus.qr_code,
-                id_transacao: dadosStatus.id_transacao
-              });
-            }
           }
         }
 
@@ -90,7 +76,7 @@ export default function DetalhesEvento() {
       return;
     }
 
-    setCarregandoPix(true);
+    setCarregandoCheckout(true);
     try {
       const resposta = await fetch('https://gerenciadordeeventos.onrender.com/api/pagamentos/checkout-pro', {
         method: 'POST',
@@ -108,7 +94,7 @@ export default function DetalhesEvento() {
           alert("🎉 " + dados.mensagem);
           window.location.reload(); 
         } else if (dados.link_pagamento) {
-          
+          // Redireciona para o ambiente seguro do Mercado Pago
           window.location.href = dados.link_pagamento;
         }
       } else {
@@ -117,13 +103,8 @@ export default function DetalhesEvento() {
     } catch (erro) {
       alert("Erro de conexão ao gerar o pagamento.");
     } finally {
-      setCarregandoPix(false);
+      setCarregandoCheckout(false);
     }
-  };
-
-  const copiarPix = () => {
-    navigator.clipboard.writeText(dadosPix.qr_code_copia_cola);
-    alert("Código PIX Copia e Cola copiado para a área de transferência!");
   };
 
   const handleInscricao = async (id_atividade) => {
@@ -148,7 +129,7 @@ export default function DetalhesEvento() {
       const dados = await resposta.json();
 
       if (resposta.ok) {
-        alert("Inscrição confirmada! Seu QR Code já está disponível.");
+        alert("Inscrição confirmada!");
         navigate('/dashboard'); 
       } else {
         alert("Erro! " + dados.erro);
@@ -200,17 +181,17 @@ export default function DetalhesEvento() {
           <div className="area-pagamento-evento" style={{ marginTop: '30px' }}>
             {statusPagamento === 'PAGO' ? (
               <div style={{ padding: '15px 30px', backgroundColor: 'var(--primary-blue)', color: 'white', borderRadius: '8px', fontWeight: 'bold', display: 'inline-block' }}>
-                Inscrição Confirmada
+                ✅ Inscrição Confirmada
               </div>
             ) : (
               <button 
                 className="btn-admin-submit" 
                 onClick={handleComprar} 
-                disabled={carregandoPix}
+                disabled={carregandoCheckout}
                 style={{ backgroundColor: '#10b981', fontSize: '1.1rem', padding: '15px 30px', boxShadow: '0 4px 6px rgba(16, 185, 129, 0.2)' }}
               >
-                {carregandoPix 
-                  ? "Redirecionando..." 
+                {carregandoCheckout 
+                  ? "Redirecionando Seguro..." 
                   : evento.preco > 0 
                     ? `Comprar Ingressos (R$ ${Number(evento.preco).toFixed(2).replace('.', ',')})` 
                     : "Garantir Inscrição (Gratuito)"}
