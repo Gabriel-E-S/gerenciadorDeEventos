@@ -273,12 +273,32 @@ app.post('/api/eventos', verificarToken, async (req, res) => {
     }
 
     try {
+
+        let url_imagem = null;
+
+        // ✅ Lógica do Cloudinary: Se enviou arquivo de imagem, joga pra nuvem
+        if (req.file) {
+            url_imagem = await new Promise((resolve, reject) => {
+                const uploadStream = cloudinary.uploader.upload_stream(
+                    {
+                        folder: 'capas_eventos', // Pasta separada só para os banners
+                        format: 'jpg',
+                        transformation: [{ width: 800, height: 450, crop: 'fill' }] // Formato 16:9 HD
+                    },
+                    (error, result) => {
+                        if (error) reject(error);
+                        else resolve(result.secure_url);
+                    }
+                );
+                uploadStream.end(req.file.buffer);
+            });
+        }
         const query = `
-            INSERT INTO Evento (id_usuario_gerente, titulo, descricao, dataInicio, dataFim, local, numeroVagas)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO Evento (id_usuario_gerente, titulo, descricao, dataInicio, dataFim, local, numeroVagas, url_imagem)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `; 
         const [result] = await db.execute(query, [
-            idOrganizador, titulo, descricao || null, dataInicio, dataFim, local || null, numeroVagas || null
+            idOrganizador, titulo, descricao || null, dataInicio, dataFim, local || null, numeroVagas || null, url_imagem
         ]);
         
         res.status(201).json({ mensagem: "Evento criado com sucesso!", id_evento: result.insertId });
@@ -360,7 +380,7 @@ app.get('/api/eventos/:id', async (req, res) => {
     }
 });
 
-app.put('/api/eventos/:id', verificarToken, async (req, res) => {
+app.put('/api/eventos/:id', verificarToken, upload.single('imagem'), async (req, res) => {
     const { titulo, descricao, dataInicio, dataFim, local, numeroVagas } = req.body;
     const { id } = req.params;
 
@@ -377,12 +397,45 @@ app.put('/api/eventos/:id', verificarToken, async (req, res) => {
         const dataInicioFormatada = dataInicio.replace('T', ' ');
         const dataFimFormatada = dataFim.replace('T', ' ');
 
-        const query = `
-            UPDATE Evento 
-            SET titulo = ?, descricao = ?, dataInicio = ?, dataFim = ?, local = ?, numeroVagas = ?
-            WHERE id_evento = ?
-        `;
-        await db.execute(query, [titulo, descricao || null, dataInicioFormatada, dataFimFormatada, local || null, numeroVagas || null, id]);
+        let url_imagem = null;
+
+        if (req.file) {
+            url_imagem = await new Promise((resolve, reject) => {
+                const uploadStream = cloudinary.uploader.upload_stream(
+                    {
+                        folder: 'capas_eventos',
+                        format: 'jpg',
+                        transformation: [{ width: 800, height: 450, crop: 'fill' }] 
+                    },
+                    (error, result) => {
+                        if (error) reject(error);
+                        else resolve(result.secure_url);
+                    }
+                );
+                uploadStream.end(req.file.buffer);
+            });
+        }
+
+        let query;
+        let parametros;
+
+        if (url_imagem) {
+            query = `
+                UPDATE Evento 
+                SET titulo = ?, descricao = ?, dataInicio = ?, dataFim = ?, local = ?, numeroVagas = ?, url_imagem = ?
+                WHERE id_evento = ?
+            `;
+            parametros = [titulo, descricao || null, dataInicioFormatada, dataFimFormatada, local || null, numeroVagas || null, url_imagem, id];
+        } else {
+            query = `
+                UPDATE Evento 
+                SET titulo = ?, descricao = ?, dataInicio = ?, dataFim = ?, local = ?, numeroVagas = ?
+                WHERE id_evento = ?
+            `;
+            parametros = [titulo, descricao || null, dataInicioFormatada, dataFimFormatada, local || null, numeroVagas || null, id];
+        }
+
+        await db.execute(query, parametros);
         
         res.status(200).json({ mensagem: "Evento atualizado com sucesso!" });
     } catch (erro) {
@@ -1057,7 +1110,7 @@ app.post('/api/pagamentos/webhook', async (req, res) => {
                     const query = 'UPDATE InscricaoEvento SET status_pagamento = ?, id_transacao_mp = ? WHERE id_usuario = ? AND id_evento = ?';
                     await db.execute(query, ['PAGO', paymentId, id_usuario, id_evento]);
                     
-                    console.log(`✅ SUCESSO: Aluno ${id_usuario} pagou o Evento ${id_evento} via Cartão/MP! Vaga liberada.`);
+                    console.log(`SUCESSO: Aluno ${id_usuario} pagou o Evento ${id_evento} via Cartão/MP! Vaga liberada.`);
                 }
             }
         }

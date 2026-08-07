@@ -17,6 +17,8 @@ export default function EditarEvento() {
     titulo: '', descricao: '', dataInicio: '', dataFim: '', local: '', numeroVagas: '', idOrganizador: ''
   });
   
+  const [imagemEvento, setImagemEvento] = useState(null);
+  
   const [listaAtividades, setListaAtividades] = useState([]);
   const [listaOrganizadores, setListaOrganizadores] = useState([]); 
   const [carregando, setCarregando] = useState(true);
@@ -29,7 +31,7 @@ export default function EditarEvento() {
   const [mostrandoFormNova, setMostrandoFormNova] = useState(false);
   const [novaAtividadeData, setNovaAtividadeData] = useState({
     tituloAtividade: '', dataAtividade: '', horaInicio: '', horaFim: '', capacidade: ''
-  });
+  });     
 
   const [metricas, setMetricas] = useState({ totalInscritos: 0, totalCheckins: 0, taxaComparecimento: 0, numeroVagas: null, taxaOcupacao: null });
 
@@ -118,10 +120,24 @@ export default function EditarEvento() {
   const handleSalvarEvento = async (e) => {
     e.preventDefault();
     try {
+      const formData = new FormData();
+      formData.append('titulo', eventoData.titulo);
+      formData.append('descricao', eventoData.descricao);
+      formData.append('dataInicio', eventoData.dataInicio);
+      formData.append('dataFim', eventoData.dataFim);
+      formData.append('local', eventoData.local);
+      formData.append('numeroVagas', eventoData.numeroVagas);
+      
+      if (imagemEvento) {
+        formData.append('imagem', imagemEvento);
+      }
+
       const resposta = await fetch(`https://gerenciadordeeventos.onrender.com/api/eventos/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenSessao}` },
-        body: JSON.stringify(eventoData)
+        headers: { 
+          'Authorization': `Bearer ${tokenSessao}` 
+        },
+        body: formData
       });
       const dados = await resposta.json();
       if (resposta.ok) alert("Ok " + dados.mensagem);
@@ -292,6 +308,7 @@ export default function EditarEvento() {
         <FormularioEvento 
           eventoData={eventoData}
           setEventoData={setEventoData}
+          setImagemEvento={setImagemEvento} 
           onSubmit={handleSalvarEvento}
           isBloqueado={false}
           textoBotao="Salvar Evento"

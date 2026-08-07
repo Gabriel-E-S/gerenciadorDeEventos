@@ -3,6 +3,7 @@ import React from 'react';
 export default function FormularioEvento({
   eventoData,
   setEventoData,
+  setImagemEvento, 
   onSubmit,
   isBloqueado,
   textoBotao,
@@ -11,6 +12,12 @@ export default function FormularioEvento({
   const handleChange = (e) => {
     const { name, value } = e.target;
     setEventoData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleFileChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      setImagemEvento(e.target.files[0]);
+    }
   };
 
   return (
@@ -43,6 +50,19 @@ export default function FormularioEvento({
             </option>
           ))}
         </select>
+      </div>
+
+      <div className="form-group">
+        <label>Capa do Evento (Imagem)</label>
+        <input 
+          type="file" 
+          accept="image/jpeg, image/png, image/webp" 
+          onChange={handleFileChange} 
+          disabled={isBloqueado} 
+        />
+        <small style={{ color: '#64748b', fontSize: '0.8rem', marginTop: '4px', display: 'block' }}>
+          Recomendado: Imagens em alta resolução. O sistema fará o recorte automático para 16:9.
+        </small>
       </div>
 
       <div className="form-group">

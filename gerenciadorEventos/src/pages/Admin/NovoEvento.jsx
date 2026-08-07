@@ -13,6 +13,8 @@ export default function NovoEvento() {
   const [eventoData, setEventoData] = useState({
     titulo: '', descricao: '', dataInicio: '', dataFim: '', local: '', numeroVagas: '', idOrganizador: ''
   });
+  
+  const [imagemEvento, setImagemEvento] = useState(null);
 
   const [atividadeData, setAtividadeData] = useState({
     tituloAtividade: '', dataAtividade: '', horaInicio: '', horaFim: '', capacidade: ''
@@ -40,13 +42,26 @@ export default function NovoEvento() {
   const handleCriarEvento = async (e) => {
     e.preventDefault();
     try {
+      
+      const formData = new FormData();
+      formData.append('titulo', eventoData.titulo);
+      formData.append('descricao', eventoData.descricao);
+      formData.append('dataInicio', eventoData.dataInicio);
+      formData.append('dataFim', eventoData.dataFim);
+      formData.append('local', eventoData.local);
+      formData.append('numeroVagas', eventoData.numeroVagas);
+      formData.append('idOrganizador', eventoData.idOrganizador);
+      
+      if (imagemEvento) {
+        formData.append('imagem', imagemEvento);
+      }
+
       const resposta = await fetch('https://gerenciadordeeventos.onrender.com/api/eventos', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'Authorization': `Bearer ${tokenSessao}`
         },
-        body: JSON.stringify(eventoData) 
+        body: formData 
       });
 
       const dados = await resposta.json();
@@ -102,6 +117,7 @@ export default function NovoEvento() {
         <FormularioEvento 
           eventoData={eventoData}
           setEventoData={setEventoData}
+          setImagemEvento={setImagemEvento} 
           onSubmit={handleCriarEvento}
           isBloqueado={idEventoCriado !== null}
           listaOrganizadores={listaOrganizadores}
