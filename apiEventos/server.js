@@ -1057,14 +1057,37 @@ app.post('/api/pagamentos/webhook', async (req, res) => {
 app.get('/api/eventos/:id/status-pagamento', verificarToken, async (req, res) => {
     try {
         const [inscricao] = await db.execute(
-            'SELECT status_pagamento FROM InscricaoEvento WHERE id_usuario = ? AND id_evento = ?',
+            'SELECT status_pagamento, id_transacao_mp FROM InscricaoEvento WHERE id_usuario = ? AND id_evento = ?',
             [req.usuario.id, req.params.id]
         );
         
         if (inscricao.length > 0) {
-            res.status(200).json({ status: inscricao[0].status_pagamento });
+            const status = inscricao[0].status_pagamento;
+            const mp_id = inscricao[0].id_transacao_mp;
+
+            if (status === 'PENDENTE' && mp_id) {
+                try {
+                    
+                    const pagamentoMP = await payment.get({ id: mp_id });
+                    
+                    const qr_code_copia_cola = pagamentoMP.point_of_interaction.transaction_data.qr_code;
+                    const qr_code_imagem = pagamentoMP.point_of_interaction.transaction_data.qr_code_base64;
+
+                    return res.status(200).json({ 
+                        status: status,
+                        qr_code: qr_code_copia_cola,
+                        qr_code_base64: qr_code_imagem,
+                        id_transacao: mp_id
+                    });
+                } catch (mpErro) {
+                    console.error("Erro ao recuperar PIX no MP:", mpErro);
+                    return res.status(200).json({ status: status }); 
+                }
+            }
+
+            return res.status(200).json({ status: status });
         } else {
-            res.status(200).json({ status: null });
+            return res.status(200).json({ status: null });
         }
     } catch (erro) {
         console.error("Erro ao buscar status de pagamento:", erro);

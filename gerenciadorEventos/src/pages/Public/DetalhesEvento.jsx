@@ -56,6 +56,14 @@ export default function DetalhesEvento() {
           if (resStatus.ok) {
             const { status } = await resStatus.json();
             setStatusPagamento(status);
+
+            if (dadosStatus.status === 'PENDENTE' && dadosStatus.qr_code) {
+              setDadosPix({
+                qr_code_base64: dadosStatus.qr_code_base64,
+                qr_code_copia_cola: dadosStatus.qr_code,
+                id_transacao: dadosStatus.id_transacao
+              });
+            }
           }
         }
 
@@ -190,8 +198,8 @@ export default function DetalhesEvento() {
           <div className="area-pagamento-evento" style={{ marginTop: '30px' }}>
       
             {statusPagamento === 'PAGO' ? (
-              <div style={{ padding: '15px 30px', backgroundColor: '#d1fae5', color: '#065f46', borderRadius: '8px', fontWeight: 'bold', border: '1px solid #10b981', display: 'inline-block' }}>
-                ✅ Inscrição Confirmada
+              <div style={{ padding: '15px 30px', backgroundColor: 'var(--primary-blue)', color: 'white', borderRadius: '8px', fontWeight: 'bold', display: 'inline-block' }}>
+                Inscrição Confirmada
               </div>
             ) : !dadosPix ? (
               <button 
@@ -226,7 +234,7 @@ export default function DetalhesEvento() {
                     style={{ width: '100%', padding: '12px', marginBottom: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '0.85rem' }}
                   />
                   <button className="btn-concluir" onClick={copiarPix} style={{ width: '100%', backgroundColor: '#3b82f6' }}>
-                    📄 Copiar Código
+                    Copiar Código
                   </button>
                 </div>
               </div>
