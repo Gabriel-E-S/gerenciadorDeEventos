@@ -53,10 +53,15 @@ export default function DetalhesEvento() {
           const resStatus = await fetch(`https://gerenciadordeeventos.onrender.com/api/eventos/${id}/status-pagamento`, {
             headers: { 'Authorization': `Bearer ${tokenSessao}` }
           });
+          
           if (resStatus.ok) {
-            const { status } = await resStatus.json();
-            setStatusPagamento(status);
+            // ✅ CORREÇÃO AQUI: Lemos o JSON inteiro para a variável dadosStatus
+            const dadosStatus = await resStatus.json();
+            
+            // ✅ Atualizamos o estado
+            setStatusPagamento(dadosStatus.status);
 
+            // ✅ Agora o React entende quem é dadosStatus e consegue ler o QR Code
             if (dadosStatus.status === 'PENDENTE' && dadosStatus.qr_code) {
               setDadosPix({
                 qr_code_base64: dadosStatus.qr_code_base64,
@@ -215,7 +220,7 @@ export default function DetalhesEvento() {
                     : "Garantir Inscrição (Gratuito)"}
               </button>
             ) : (
-              <div className="caixa-pix-gerado" style={{ backgroundColor: '#ffffff', color: '#1e293b', padding: '25px', border: '2px solid #10b981', borderRadius: '12px', maxWidth: '450px', margin: '0 auto', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}>
+              <div className="caixa-pix-gerado" style={{ backgroundColor: '#ffffff', color: '#1e293b', padding: '25px', borderRadius: '12px', maxWidth: '450px', margin: '0 auto', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}>
                 <h3 style={{ color: '#10b981', margin: '0 0 10px 0' }}>Escaneie o QR Code para pagar</h3>
                 <p style={{ fontSize: '0.9rem', marginBottom: '15px' }}>O acesso às atividades será liberado automaticamente após a aprovação do pagamento.</p>
                 
