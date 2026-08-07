@@ -17,6 +17,8 @@ export default function DetalhesEvento() {
 
   const [dadosPix, setDadosPix] = useState(null);
   const [carregandoPix, setCarregandoPix] = useState(false);
+  
+  const [statusPagamento, setStatusPagamento] = useState(null);
 
   useEffect(() => {
     const buscarDados = async () => {
@@ -38,6 +40,7 @@ export default function DetalhesEvento() {
 
         const tokenSessao = localStorage.getItem('tokenSessao');
         if (tokenSessao) {
+          
           const resIngressos = await fetch('https://gerenciadordeeventos.onrender.com/api/meus-ingressos', {
             headers: { 'Authorization': `Bearer ${tokenSessao}` }
           });
@@ -45,6 +48,14 @@ export default function DetalhesEvento() {
             const dadosIngressos = await resIngressos.json();
             const idsInscritos = dadosIngressos.map(ing => ing.id_atividade);
             setInscricoesUsuario(idsInscritos);
+          }
+
+          const resStatus = await fetch(`https://gerenciadordeeventos.onrender.com/api/eventos/${id}/status-pagamento`, {
+            headers: { 'Authorization': `Bearer ${tokenSessao}` }
+          });
+          if (resStatus.ok) {
+            const { status } = await resStatus.json();
+            setStatusPagamento(status);
           }
         }
 
@@ -177,7 +188,12 @@ export default function DetalhesEvento() {
           <p className="detalhes-descricao">{evento.descricao || 'Nenhuma descrição detalhada fornecida.'}</p>
 
           <div className="area-pagamento-evento" style={{ marginTop: '30px' }}>
-            {!dadosPix ? (
+      
+            {statusPagamento === 'PAGO' ? (
+              <div style={{ padding: '15px 30px', backgroundColor: '#d1fae5', color: '#065f46', borderRadius: '8px', fontWeight: 'bold', border: '1px solid #10b981', display: 'inline-block' }}>
+                ✅ Inscrição Confirmada
+              </div>
+            ) : !dadosPix ? (
               <button 
                 className="btn-admin-submit" 
                 onClick={handleGerarPix} 
@@ -191,7 +207,7 @@ export default function DetalhesEvento() {
                     : "Garantir Inscrição (Gratuito)"}
               </button>
             ) : (
-              <div className="caixa-pix-gerado" style={{ backgroundColor: '#ffffff', color: '#1e293b', padding: '25px', border: '2px  #10b981', borderRadius: '12px', maxWidth: '450px', margin: '0 auto', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}>
+              <div className="caixa-pix-gerado" style={{ backgroundColor: '#ffffff', color: '#1e293b', padding: '25px', border: '2px solid #10b981', borderRadius: '12px', maxWidth: '450px', margin: '0 auto', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}>
                 <h3 style={{ color: '#10b981', margin: '0 0 10px 0' }}>Escaneie o QR Code para pagar</h3>
                 <p style={{ fontSize: '0.9rem', marginBottom: '15px' }}>O acesso às atividades será liberado automaticamente após a aprovação do pagamento.</p>
                 

@@ -1054,6 +1054,23 @@ app.post('/api/pagamentos/webhook', async (req, res) => {
     }
 });
 
+app.get('/api/eventos/:id/status-pagamento', verificarToken, async (req, res) => {
+    try {
+        const [inscricao] = await db.execute(
+            'SELECT status_pagamento FROM InscricaoEvento WHERE id_usuario = ? AND id_evento = ?',
+            [req.usuario.id, req.params.id]
+        );
+        
+        if (inscricao.length > 0) {
+            res.status(200).json({ status: inscricao[0].status_pagamento });
+        } else {
+            res.status(200).json({ status: null });
+        }
+    } catch (erro) {
+        console.error("Erro ao buscar status de pagamento:", erro);
+        res.status(500).json({ erro: "Erro ao buscar status." });
+    }
+});
 
 const PORT = process.env.DB_PORT;
 app.listen(PORT, () => {
