@@ -932,6 +932,30 @@ app.put('/api/admin/usuarios/:id/perfil', verificarToken, async (req, res) => {
 // ROTA DE PAGAMENTO PIX (MERCADO PAGO)
 // ==========================================
 
+// ==========================================
+// ROTA 1: BUSCAR STATUS (Agora Limpa, sem recuperar PIX)
+// ==========================================
+app.get('/api/eventos/:id/status-pagamento', verificarToken, async (req, res) => {
+    try {
+        const [inscricao] = await db.execute(
+            'SELECT status_pagamento FROM InscricaoEvento WHERE id_usuario = ? AND id_evento = ?',
+            [req.usuario.id, req.params.id]
+        );
+        
+        if (inscricao.length > 0) {
+            res.status(200).json({ status: inscricao[0].status_pagamento });
+        } else {
+            res.status(200).json({ status: null });
+        }
+    } catch (erro) {
+        console.error("Erro ao buscar status de pagamento:", erro);
+        res.status(500).json({ erro: "Erro ao buscar status." });
+    }
+});
+
+// ==========================================
+// ROTA 2: CRIAR CHECKOUT PRO (Etiqueta Segura)
+// ==========================================
 app.post('/api/pagamentos/checkout-pro', verificarToken, async (req, res) => {
     const { id_evento } = req.body;
     const id_usuario = req.usuario.id;
@@ -944,9 +968,8 @@ app.post('/api/pagamentos/checkout-pro', verificarToken, async (req, res) => {
             [id_usuario, id_evento]
         );
 
-        if (inscricaoExiste.length > 0) {
-            const status = inscricaoExiste[0].status_pagamento;
-            if (status === 'PAGO') return res.status(400).json({ erro: "Você já está inscrito neste evento!" });
+        if (inscricaoExiste.length > 0 && inscricaoExiste[0].status_pagamento === 'PAGO') {
+            return res.status(400).json({ erro: "Você já está inscrito neste evento!" });
         }
 
         const [eventos] = await db.execute('SELECT titulo, preco FROM Evento WHERE id_evento = ?', [id_evento]);
@@ -955,18 +978,12 @@ app.post('/api/pagamentos/checkout-pro', verificarToken, async (req, res) => {
         const evento = eventos[0];
         const preco = Number(evento.preco);
 
-        // Se for gratuito, já aprova direto sem Mercado Pago
+        // Inscrição Gratuita
         if (preco === 0) {
             if (inscricaoExiste.length === 0) {
-                await db.execute(
-                    'INSERT INTO InscricaoEvento (id_usuario, id_evento, valor_pago, status_pagamento) VALUES (?, ?, ?, ?)',
-                    [id_usuario, id_evento, 0.00, 'PAGO']
-                );
+                await db.execute('INSERT INTO InscricaoEvento (id_usuario, id_evento, valor_pago, status_pagamento) VALUES (?, ?, ?, ?)', [id_usuario, id_evento, 0.00, 'PAGO']);
             } else {
-                await db.execute(
-                    'UPDATE InscricaoEvento SET status_pagamento = ? WHERE id_usuario = ? AND id_evento = ?',
-                    ['PAGO', id_usuario, id_evento]
-                );
+                await db.execute('UPDATE InscricaoEvento SET status_pagamento = ? WHERE id_usuario = ? AND id_evento = ?', ['PAGO', id_usuario, id_evento]);
             }
             return res.status(200).json({ status: 'gratis', mensagem: "Inscrição gratuita realizada com sucesso!" });
         }
@@ -974,16 +991,13 @@ app.post('/api/pagamentos/checkout-pro', verificarToken, async (req, res) => {
         const [usuarios] = await db.execute('SELECT nome, email FROM Usuario WHERE id_usuario = ?', [id_usuario]);
         const usuario = usuarios[0];
 
-        // Se não existir no banco ainda, cria como PENDENTE para reservar a vaga
+        // Se não existir no banco, cria como PENDENTE
         if (inscricaoExiste.length === 0) {
-            await db.execute(
-                'INSERT INTO InscricaoEvento (id_usuario, id_evento, valor_pago, status_pagamento) VALUES (?, ?, ?, ?)',
-                [id_usuario, id_evento, preco, 'PENDENTE']
-            );
+            await db.execute('INSERT INTO InscricaoEvento (id_usuario, id_evento, valor_pago, status_pagamento) VALUES (?, ?, ?, ?)', [id_usuario, id_evento, preco, 'PENDENTE']);
         }
 
+        // Criando a Preferência (Checkout Pro)
         const preference = new Preference(client);
-
         const respostaMP = await preference.create({
             body: {
                 items: [
@@ -999,22 +1013,18 @@ app.post('/api/pagamentos/checkout-pro', verificarToken, async (req, res) => {
                     name: usuario.nome.split(' ')[0],
                     email: usuario.email
                 },
-                
                 back_urls: {
                     success: `https://aki-xjvb.onrender.com/eventos/${id_evento}`,
                     failure: `https://aki-xjvb.onrender.com/eventos/${id_evento}`,
                     pending: `https://aki-xjvb.onrender.com/eventos/${id_evento}`
                 },
                 auto_return: 'approved',
-                
-                external_reference: JSON.stringify({ u: id_usuario, e: id_evento })
+                // ✨ NOVO: Etiqueta em formato de texto puro para o Webhook ler sem bugar
+                external_reference: `USUARIO_${id_usuario}_EVENTO_${id_evento}`
             }
         });
 
-        res.status(200).json({ 
-            status: 'pendente', 
-            link_pagamento: respostaMP.init_point 
-        });
+        res.status(200).json({ status: 'pendente', link_pagamento: respostaMP.init_point });
 
     } catch (erro) {
         console.error("Erro ao gerar link de pagamento:", erro);
@@ -1023,9 +1033,8 @@ app.post('/api/pagamentos/checkout-pro', verificarToken, async (req, res) => {
 });
 
 // ==========================================
-// WEBHOOK
+// ROTA 3: WEBHOOK (Lendo a nova etiqueta)
 // ==========================================
-
 app.post('/api/pagamentos/webhook', async (req, res) => {
     const action = req.body.action || req.body.type;
     const paymentId = req.body?.data?.id || req.query.id;
@@ -1033,21 +1042,21 @@ app.post('/api/pagamentos/webhook', async (req, res) => {
     try {
         if (action === 'payment.created' || action === 'payment.updated' || req.query.topic === 'payment') {
             
-            
             const statusOficial = await payment.get({ id: paymentId });
 
             if (statusOficial.status === 'approved') {
                 
-                const referencia = statusOficial.external_reference;
-                if (referencia) {
-                    const dadosRef = JSON.parse(referencia);
-                    const id_usuario = dadosRef.u;
-                    const id_evento = dadosRef.e;
+                const referencia = statusOficial.external_reference; // Ex: USUARIO_22_EVENTO_5
+                
+                if (referencia && referencia.startsWith('USUARIO_')) {
+                    const partes = referencia.split('_');
+                    const id_usuario = partes[1];
+                    const id_evento = partes[3];
 
                     const query = 'UPDATE InscricaoEvento SET status_pagamento = ?, id_transacao_mp = ? WHERE id_usuario = ? AND id_evento = ?';
                     await db.execute(query, ['PAGO', paymentId, id_usuario, id_evento]);
                     
-                    console.log(`✅ SUCESSO: Aluno ${id_usuario} pagou o Evento ${id_evento} via MP!`);
+                    console.log(`✅ SUCESSO: Aluno ${id_usuario} pagou o Evento ${id_evento} via Cartão/MP! Vaga liberada.`);
                 }
             }
         }
@@ -1056,49 +1065,6 @@ app.post('/api/pagamentos/webhook', async (req, res) => {
     } catch (erro) {
         console.error("Erro ao processar o Webhook:", erro);
         res.status(500).send("Erro interno");
-    }
-});
-
-
-app.get('/api/eventos/:id/status-pagamento', verificarToken, async (req, res) => {
-    try {
-        const [inscricao] = await db.execute(
-            'SELECT status_pagamento, id_transacao_mp FROM InscricaoEvento WHERE id_usuario = ? AND id_evento = ?',
-            [req.usuario.id, req.params.id]
-        );
-        
-        if (inscricao.length > 0) {
-            const status = inscricao[0].status_pagamento;
-            const mp_id = inscricao[0].id_transacao_mp;
-
-            if (status === 'PENDENTE' && mp_id) {
-                try {
-                    
-                    const pagamentoMP = await payment.get({ id: mp_id });
-                    
-                    const qr_code_copia_cola = pagamentoMP.point_of_interaction.transaction_data.qr_code;
-                    const qr_code_imagem = pagamentoMP.point_of_interaction.transaction_data.qr_code_base64;
-
-                    return res.status(200).json({ 
-                        status: status,
-                        qr_code: qr_code_copia_cola,
-                        qr_code_base64: qr_code_imagem,
-                        id_transacao: mp_id
-                    });
-                } catch (mpErro) {
-                    console.error("Erro ao recuperar PIX no MP:", mpErro);
-                    return res.status(200).json({ status: status }); 
-                }
-            }
-
-
-            return res.status(200).json({ status: status });
-        } else {
-            return res.status(200).json({ status: null });
-        }
-    } catch (erro) {
-        console.error("Erro ao buscar status de pagamento:", erro);
-        res.status(500).json({ erro: "Erro ao buscar status." });
     }
 });
 
