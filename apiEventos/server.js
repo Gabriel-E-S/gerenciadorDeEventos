@@ -260,7 +260,7 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
-app.post('/api/eventos', verificarToken, async (req, res) => {
+app.post('/api/eventos', verificarToken, upload.single('imagem'), async (req, res) => {
     const { titulo, descricao, dataInicio, dataFim, local, numeroVagas, idOrganizador } = req.body;
     const perfil = req.usuario.perfil;
 
