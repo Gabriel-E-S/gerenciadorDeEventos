@@ -1019,8 +1019,9 @@ app.post('/api/pagamentos/checkout-pro', verificarToken, async (req, res) => {
                     pending: `https://aki-xjvb.onrender.com/eventos/${id_evento}`
                 },
                 auto_return: 'approved',
-                // ✨ NOVO: Etiqueta em formato de texto puro para o Webhook ler sem bugar
-                external_reference: `USUARIO_${id_usuario}_EVENTO_${id_evento}`
+                external_reference: `USUARIO_${id_usuario}_EVENTO_${id_evento}`,
+                
+                notification_url: 'https://gerenciadordeeventos.onrender.com/api/pagamentos/webhook'
             }
         });
 
