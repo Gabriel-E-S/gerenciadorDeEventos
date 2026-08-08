@@ -249,3 +249,19 @@
   color: var(--text-muted);
   margin-top: 0.5rem;
 }
+
+.detalhes-capa-container {
+  width: 100%;
+  height: 300px;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 25px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.detalhes-capa-imagem {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}

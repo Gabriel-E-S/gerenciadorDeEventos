@@ -1,4 +1,5 @@
 import React from 'react';
+import './CardEvento.css';
 
 export default function CardEvento({ evento, usuarioLogado, onGerenciar, onVerDetalhes }) {
   const dataInicio = new Date(evento.dataInicio).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
@@ -9,6 +10,21 @@ export default function CardEvento({ evento, usuarioLogado, onGerenciar, onVerDe
 
   return (
     <div className="evento-card-page">
+      
+      <div className="card-imagem-container">
+        {evento.url_imagem ? (
+          <img 
+            src={evento.url_imagem} 
+            alt={`Capa do evento ${evento.titulo}`} 
+            className="card-imagem" 
+          />
+        ) : (
+          <div className="card-imagem-placeholder">
+            <span>Sem Imagem</span>
+          </div>
+        )}
+      </div>
+
       <div className="card-banner">
         <h3>{evento.titulo}</h3>
       </div>

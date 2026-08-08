@@ -169,6 +169,17 @@ export default function DetalhesEvento() {
         </div>
 
         <div className="detalhes-banner">
+
+          {evento.url_imagem && (
+            <div className="detalhes-capa-container">
+              <img 
+                src={evento.url_imagem} 
+                alt="Banner do Evento" 
+                className="detalhes-capa-imagem"
+              />
+            </div>
+          )}
+
           <h1>{evento.titulo}</h1>
           <p className="detalhes-local">Local: {evento.local || 'Local não informado'}</p>
           
