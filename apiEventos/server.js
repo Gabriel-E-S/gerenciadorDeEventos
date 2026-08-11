@@ -250,7 +250,8 @@ app.post('/api/login', async (req, res) => {
                 email: usuario.email,
                 perfil: usuario.tipoPerfil,
                 isStaff: isStaff,
-                documento: usuario.cpf || usuario.ra
+                documento: usuario.cpf || usuario.ra,
+                fotoUrl: usuario.fotoUrl || null
             }
         });
 
@@ -1119,6 +1120,89 @@ app.post('/api/pagamentos/webhook', async (req, res) => {
     } catch (erro) {
         console.error("Erro ao processar o Webhook:", erro);
         res.status(500).send("Erro interno");
+    }
+});
+
+// ==========================================
+// ROTAS DE PERFIL DO USUÁRIO
+// ==========================================
+
+// Buscar os dados atuais do usuário logado
+app.get('/api/usuario/perfil', verificarToken, async (req, res) => {
+    try {
+        const [usuarios] = await db.execute(
+            'SELECT nome, email, cpf, ra, fotoUrl FROM Usuario WHERE id_usuario = ?',
+            [req.usuario.id]
+        );
+        
+        if (usuarios.length === 0) return res.status(404).json({ erro: "Usuário não encontrado." });
+        
+        res.status(200).json(usuarios[0]);
+    } catch (erro) {
+        console.error("Erro ao buscar perfil:", erro);
+        res.status(500).json({ erro: "Erro interno ao buscar dados do perfil." });
+    }
+});
+
+// Atualizar os dados e/ou a foto
+app.put('/api/usuario/perfil', verificarToken, upload.single('fotoPerfil'), async (req, res) => {
+    const { nome, email, senhaNova } = req.body;
+    const id_usuario = req.usuario.id;
+
+    if (!nome || !email) {
+        return res.status(400).json({ erro: "Nome e e-mail são obrigatórios." });
+    }
+
+    try {
+        
+        const [emailExiste] = await db.execute(
+            'SELECT id_usuario FROM Usuario WHERE email = ? AND id_usuario != ?',
+            [email, id_usuario]
+        );
+        if (emailExiste.length > 0) return res.status(400).json({ erro: "Este e-mail já está em uso por outra conta." });
+
+        let url_imagem = null;
+
+        if (req.file) {
+            url_imagem = await new Promise((resolve, reject) => {
+                const uploadStream = cloudinary.uploader.upload_stream(
+                    { folder: 'eventos_perfil', format: 'jpg', transformation: [{ width: 400, height: 400, crop: 'fill' }] },
+                    (error, result) => {
+                        if (error) reject(error);
+                        else resolve(result.secure_url);
+                    }
+                );
+                uploadStream.end(req.file.buffer);
+            });
+        }
+
+        let query = 'UPDATE Usuario SET nome = ?, email = ?';
+        const parametros = [nome, email];
+
+        if (senhaNova) {
+            const senhaHash = await bcrypt.hash(senhaNova, 10);
+            query += ', senha = ?';
+            parametros.push(senhaHash);
+        }
+
+        if (url_imagem) {
+            query += ', fotoUrl = ?';
+            parametros.push(url_imagem);
+        }
+
+        query += ' WHERE id_usuario = ?';
+        parametros.push(id_usuario);
+
+        await db.execute(query, parametros);
+
+        res.status(200).json({ 
+            mensagem: "Perfil atualizado com sucesso!",
+            fotoUrl: url_imagem 
+        });
+
+    } catch (erro) {
+        console.error("Erro ao atualizar perfil:", erro);
+        res.status(500).json({ erro: "Erro interno ao atualizar perfil." });
     }
 });
 

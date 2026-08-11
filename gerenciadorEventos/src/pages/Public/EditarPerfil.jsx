@@ -1,0 +1,182 @@
+import React, { useState, useEffect, useContext } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { AuthContext } from '../../context/AuthContext';
+import Loader from '../../components/UI/Loader';
+import './EditarPerfil.css';
+
+export default function EditarPerfil() {
+  const navigate = useNavigate();
+  const { usuarioLogado } = useContext(AuthContext);
+  const tokenSessao = localStorage.getItem('tokenSessao');
+
+  const [carregando, setCarregando] = useState(true);
+  const [salvando, setSalvando] = useState(false);
+  const [fotoPreview, setFotoPreview] = useState(null);
+  
+  const [perfilData, setPerfilData] = useState({
+    nome: '',
+    email: '',
+    senhaNova: '',
+    fotoUrl: ''
+  });
+  const [novaFotoArquivo, setNovaFotoArquivo] = useState(null);
+
+  useEffect(() => {
+    const buscarPerfil = async () => {
+      try {
+        const resposta = await fetch('https://gerenciadordeeventos.onrender.com/api/usuario/perfil', {
+          headers: { 'Authorization': `Bearer ${tokenSessao}` }
+        });
+        
+        if (resposta.ok) {
+          const dados = await resposta.json();
+          setPerfilData({
+            nome: dados.nome,
+            email: dados.email,
+            senhaNova: '', 
+            fotoUrl: dados.fotoUrl
+          });
+        }
+      } catch (erro) {
+        console.error("Erro ao carregar perfil:", erro);
+      } finally {
+        setCarregando(false);
+      }
+    };
+
+    if (tokenSessao) buscarPerfil();
+  }, [tokenSessao]);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setPerfilData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setNovaFotoArquivo(file);
+      
+      setFotoPreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSalvando(true);
+
+    const formData = new FormData();
+    formData.append('nome', perfilData.nome);
+    formData.append('email', perfilData.email);
+    
+    if (perfilData.senhaNova) {
+      formData.append('senhaNova', perfilData.senhaNova);
+    }
+    
+    if (novaFotoArquivo) {
+      formData.append('fotoPerfil', novaFotoArquivo);
+    }
+
+    try {
+      const resposta = await fetch('https://gerenciadordeeventos.onrender.com/api/usuario/perfil', {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${tokenSessao}` },
+        body: formData
+      });
+
+      const dados = await resposta.json();
+
+      if (resposta.ok) {
+        alert("✅ " + dados.mensagem);
+        // Atualiza a foto atual com a nova retornada pelo backend (se houver)
+        if (dados.fotoUrl) {
+            setPerfilData(prev => ({ ...prev, fotoUrl: dados.fotoUrl, senhaNova: '' }));
+            setFotoPreview(null);
+            setNovaFotoArquivo(null);
+        }
+      } else {
+        alert("Erro: " + dados.erro);
+      }
+    } catch (erro) {
+      alert("Erro de conexão ao atualizar perfil.");
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  if (carregando) return <Loader mensagem="Carregando suas informações..." />;
+
+  // Decide qual foto mostrar: O preview novo, a foto do banco, ou o placeholder vazio
+  const imagemExibida = fotoPreview || perfilData.fotoUrl || "https://res.cloudinary.com/demo/image/upload/d_avatar.png/non_existing_id.png";
+
+  return (
+    <section className="perfil-container">
+      <div className="perfil-card">
+        <h2>Meu Perfil</h2>
+        <p className="perfil-subtitulo">Gerencie suas informações pessoais e credenciais de acesso.</p>
+
+        <form onSubmit={handleSubmit} className="perfil-form">
+          
+          <div className="perfil-foto-section">
+            <div className="perfil-foto-wrapper">
+              <img src={imagemExibida} alt="Sua foto de perfil" className="perfil-foto-avatar" />
+            </div>
+            <div className="perfil-foto-inputs">
+              <label className="btn-alterar-foto">
+                Escolher Nova Foto
+                <input type="file" accept="image/jpeg, image/png, image/webp" onChange={handleFileChange} hidden />
+              </label>
+              <small>Formatos aceitos: JPG, PNG. Tamanho ideal: 400x400px.</small>
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label>Nome Completo</label>
+            <input 
+              type="text" 
+              name="nome" 
+              value={perfilData.nome} 
+              onChange={handleChange} 
+              required 
+            />
+          </div>
+
+          <div className="form-group">
+            <label>E-mail de Acesso</label>
+            <input 
+              type="email" 
+              name="email" 
+              value={perfilData.email} 
+              onChange={handleChange} 
+              required 
+            />
+          </div>
+
+          <div className="perfil-divisor">
+            <span>Segurança</span>
+          </div>
+
+          <div className="form-group">
+            <label>Nova Senha (opcional)</label>
+            <input 
+              type="password" 
+              name="senhaNova" 
+              value={perfilData.senhaNova} 
+              onChange={handleChange} 
+              placeholder="Preencha apenas se quiser alterar" 
+            />
+          </div>
+
+          <div className="perfil-actions">
+            <button type="button" className="btn-cancelar" onClick={() => navigate(-1)}>
+              Voltar
+            </button>
+            <button type="submit" className="btn-salvar" disabled={salvando}>
+              {salvando ? "Salvando..." : "Salvar Alterações"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </section>
+  );
+}
