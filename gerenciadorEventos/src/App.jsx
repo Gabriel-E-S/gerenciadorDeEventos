@@ -14,6 +14,7 @@ import ProtectedRoute from './context/ProtectedRoute';
 import EditarEvento from './pages/Admin/EditarEvento';
 import DetalhesEvento from './pages/Public/DetalhesEvento';
 import CadastroOrganizador from './pages/Admin/CadastroOrganizador';
+import EditarPerfil from './pages/Public/EditarPerfil';
 
 export default function App() {
   return (
@@ -29,6 +30,15 @@ export default function App() {
             <Route path="/contato" element={<Contato />} />
             <Route path="/login" element={<Auth />} />
             <Route path="/eventos/:id" element={<DetalhesEvento />} />
+
+            <Route 
+              path="/editar-perfil" 
+              element={
+                <ProtectedRoute>
+                  <EditarPerfil />
+                </ProtectedRoute>
+              } 
+            />
 
             <Route path="/dashboard" element={
               <ProtectedRoute>
