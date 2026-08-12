@@ -14,7 +14,7 @@ export default function EditarEvento() {
   const { usuarioLogado } = useContext(AuthContext);
 
   const [eventoData, setEventoData] = useState({
-    titulo: '', descricao: '', dataInicio: '', dataFim: '', local: '', numeroVagas: '', idOrganizador: ''
+    titulo: '', descricao: '', dataInicio: '', dataFim: '', local: '', numeroVagas: '', idOrganizador: '', preco: ''
   });
   
   const [imagemEvento, setImagemEvento] = useState(null);
@@ -60,7 +60,8 @@ export default function EditarEvento() {
           dataFim: formatarDataParaInput(dados.dataFim),
           local: dados.local || '',
           numeroVagas: dados.numeroVagas || '',
-          idOrganizador: dados.id_usuario_gerente || '' 
+          idOrganizador: dados.id_usuario_gerente || '',
+          preco: dados.preco || 0
         });
       } else {
         alert("Evento não encontrado.");
@@ -127,6 +128,7 @@ export default function EditarEvento() {
       formData.append('dataFim', eventoData.dataFim);
       formData.append('local', eventoData.local);
       formData.append('numeroVagas', eventoData.numeroVagas);
+      formData.append('preco', eventoData.preco || 0);
       
       if (imagemEvento) {
         formData.append('imagem', imagemEvento);
