@@ -10,8 +10,9 @@ export default function NovoEvento() {
   const [idEventoCriado, setIdEventoCriado] = useState(null);
   const [listaOrganizadores, setListaOrganizadores] = useState([]); 
 
+  // ✨ ATUALIZADO: Incluímos o 'preco' no estado inicial
   const [eventoData, setEventoData] = useState({
-    titulo: '', descricao: '', dataInicio: '', dataFim: '', local: '', numeroVagas: '', idOrganizador: ''
+    titulo: '', descricao: '', dataInicio: '', dataFim: '', local: '', numeroVagas: '', idOrganizador: '', preco: ''
   });
   
   const [imagemEvento, setImagemEvento] = useState(null);
@@ -42,7 +43,6 @@ export default function NovoEvento() {
   const handleCriarEvento = async (e) => {
     e.preventDefault();
     try {
-      
       const formData = new FormData();
       formData.append('titulo', eventoData.titulo);
       formData.append('descricao', eventoData.descricao);
@@ -51,6 +51,8 @@ export default function NovoEvento() {
       formData.append('local', eventoData.local);
       formData.append('numeroVagas', eventoData.numeroVagas);
       formData.append('idOrganizador', eventoData.idOrganizador);
+      
+      formData.append('preco', eventoData.preco || 0);
       
       if (imagemEvento) {
         formData.append('imagem', imagemEvento);
