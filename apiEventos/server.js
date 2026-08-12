@@ -262,7 +262,8 @@ app.post('/api/login', async (req, res) => {
 });
 
 app.post('/api/eventos', verificarToken, upload.single('imagem'), async (req, res) => {
-    const { titulo, descricao, dataInicio, dataFim, local, numeroVagas, idOrganizador } = req.body;
+    // ✨ ATUALIZADO: Recebendo o preco do req.body
+    const { titulo, descricao, dataInicio, dataFim, local, numeroVagas, idOrganizador, preco } = req.body;
     const perfil = req.usuario.perfil;
 
     if (perfil !== 'ADMINISTRADOR') {
@@ -274,17 +275,15 @@ app.post('/api/eventos', verificarToken, upload.single('imagem'), async (req, re
     }
 
     try {
-
         let url_imagem = null;
 
-        // ✅ Lógica do Cloudinary: Se enviou arquivo de imagem, joga pra nuvem
         if (req.file) {
             url_imagem = await new Promise((resolve, reject) => {
                 const uploadStream = cloudinary.uploader.upload_stream(
                     {
-                        folder: 'capas_eventos', // Pasta separada só para os banners
+                        folder: 'capas_eventos',
                         format: 'jpg',
-                        transformation: [{ width: 800, height: 450, crop: 'fill' }] // Formato 16:9 HD
+                        transformation: [{ width: 800, height: 450, crop: 'fill' }] 
                     },
                     (error, result) => {
                         if (error) reject(error);
@@ -294,12 +293,22 @@ app.post('/api/eventos', verificarToken, upload.single('imagem'), async (req, re
                 uploadStream.end(req.file.buffer);
             });
         }
+        
+        // ✨ ATUALIZADO: Incluímos 'preco' na query e nos valores
         const query = `
-            INSERT INTO Evento (id_usuario_gerente, titulo, descricao, dataInicio, dataFim, local, numeroVagas, url_imagem)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO Evento (id_usuario_gerente, titulo, descricao, dataInicio, dataFim, local, numeroVagas, url_imagem, preco)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `; 
         const [result] = await db.execute(query, [
-            idOrganizador, titulo, descricao || null, dataInicio, dataFim, local || null, numeroVagas || null, url_imagem
+            idOrganizador, 
+            titulo, 
+            descricao || null, 
+            dataInicio, 
+            dataFim, 
+            local || null, 
+            numeroVagas || null, 
+            url_imagem,
+            preco || 0 
         ]);
         
         res.status(201).json({ mensagem: "Evento criado com sucesso!", id_evento: result.insertId });
@@ -313,7 +322,6 @@ app.post('/api/eventos', verificarToken, upload.single('imagem'), async (req, re
         res.status(500).json({ erro: "Erro interno do servidor: " + msgErro });
     }
 });
-
 app.get('/api/organizadores', verificarToken, async (req, res) => {
     if (req.usuario.perfil !== 'ADMINISTRADOR') return res.status(403).json({ erro: "Acesso negado." });
     try {
@@ -382,7 +390,8 @@ app.get('/api/eventos/:id', async (req, res) => {
 });
 
 app.put('/api/eventos/:id', verificarToken, upload.single('imagem'), async (req, res) => {
-    const { titulo, descricao, dataInicio, dataFim, local, numeroVagas } = req.body;
+    
+    const { titulo, descricao, dataInicio, dataFim, local, numeroVagas, preco } = req.body;
     const { id } = req.params;
 
     const autorizado = await verificarDonoOuAdmin(req.usuario.id, req.usuario.perfil, id);
@@ -423,17 +432,17 @@ app.put('/api/eventos/:id', verificarToken, upload.single('imagem'), async (req,
         if (url_imagem) {
             query = `
                 UPDATE Evento 
-                SET titulo = ?, descricao = ?, dataInicio = ?, dataFim = ?, local = ?, numeroVagas = ?, url_imagem = ?
+                SET titulo = ?, descricao = ?, dataInicio = ?, dataFim = ?, local = ?, numeroVagas = ?, preco = ?, url_imagem = ?
                 WHERE id_evento = ?
             `;
-            parametros = [titulo, descricao || null, dataInicioFormatada, dataFimFormatada, local || null, numeroVagas || null, url_imagem, id];
+            parametros = [titulo, descricao || null, dataInicioFormatada, dataFimFormatada, local || null, numeroVagas || null, preco || 0, url_imagem, id];
         } else {
             query = `
                 UPDATE Evento 
-                SET titulo = ?, descricao = ?, dataInicio = ?, dataFim = ?, local = ?, numeroVagas = ?
+                SET titulo = ?, descricao = ?, dataInicio = ?, dataFim = ?, local = ?, numeroVagas = ?, preco = ?
                 WHERE id_evento = ?
             `;
-            parametros = [titulo, descricao || null, dataInicioFormatada, dataFimFormatada, local || null, numeroVagas || null, id];
+            parametros = [titulo, descricao || null, dataInicioFormatada, dataFimFormatada, local || null, numeroVagas || null, preco || 0, id];
         }
 
         await db.execute(query, parametros);
