@@ -10,7 +10,7 @@ export default function NovoEvento() {
   const [idEventoCriado, setIdEventoCriado] = useState(null);
   const [listaOrganizadores, setListaOrganizadores] = useState([]); 
 
-  // ✨ ATUALIZADO: Incluímos o 'preco' no estado inicial
+  
   const [eventoData, setEventoData] = useState({
     titulo: '', descricao: '', dataInicio: '', dataFim: '', local: '', numeroVagas: '', idOrganizador: '', preco: ''
   });
@@ -51,7 +51,7 @@ export default function NovoEvento() {
       formData.append('local', eventoData.local);
       formData.append('numeroVagas', eventoData.numeroVagas);
       formData.append('idOrganizador', eventoData.idOrganizador);
-      
+
       formData.append('preco', eventoData.preco || 0);
       
       if (imagemEvento) {
