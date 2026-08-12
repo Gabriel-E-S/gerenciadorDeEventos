@@ -262,7 +262,9 @@ app.post('/api/login', async (req, res) => {
 });
 
 app.post('/api/eventos', verificarToken, upload.single('imagem'), async (req, res) => {
-    // ✨ ATUALIZADO: Recebendo o preco do req.body
+    
+    console.log("➡️ DADOS RECEBIDOS (POST):", req.body);
+
     const { titulo, descricao, dataInicio, dataFim, local, numeroVagas, idOrganizador, preco } = req.body;
     const perfil = req.usuario.perfil;
 
@@ -294,7 +296,7 @@ app.post('/api/eventos', verificarToken, upload.single('imagem'), async (req, re
             });
         }
         
-        // ✨ ATUALIZADO: Incluímos 'preco' na query e nos valores
+        
         const query = `
             INSERT INTO Evento (id_usuario_gerente, titulo, descricao, dataInicio, dataFim, local, numeroVagas, url_imagem, preco)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -393,6 +395,8 @@ app.put('/api/eventos/:id', verificarToken, upload.single('imagem'), async (req,
     
     const { titulo, descricao, dataInicio, dataFim, local, numeroVagas, preco } = req.body;
     const { id } = req.params;
+
+    console.log("➡️ DADOS RECEBIDOS (PUT):", req.body);
 
     const autorizado = await verificarDonoOuAdmin(req.usuario.id, req.usuario.perfil, id);
     if (!autorizado) {
