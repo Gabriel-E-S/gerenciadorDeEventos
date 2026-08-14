@@ -967,7 +967,7 @@ app.post('/api/scanner/confirmar', verificarToken, async (req, res) => {
     console.log("➡️ DADOS RECEBIDOS PARA CHECK-IN:", req.body);
 
     try {
-        await db.execute('INSERT INTO RegistroPresenca (id_inscricaoAtividade, idOrganizador) VALUES (?, ?)', 
+        await db.execute('INSERT INTO RegistroPresenca (id_inscricaoAtividade, id_organizador) VALUES (?, ?)', 
         [id_inscricaoAtividade, idOrganizador]);
         
         res.status(200).json({ mensagem: "Presença confirmada e salva com sucesso!" });
