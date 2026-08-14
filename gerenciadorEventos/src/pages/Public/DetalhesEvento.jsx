@@ -91,7 +91,7 @@ export default function DetalhesEvento() {
 
       if (resposta.ok) {
         if (dados.status === 'gratis') {
-          alert("🎉 " + dados.mensagem);
+          alert("Ok " + dados.mensagem);
           window.location.reload(); 
         } else if (dados.link_pagamento) {
           // Redireciona para o ambiente seguro do Mercado Pago

@@ -959,25 +959,25 @@ app.post("/api/scanner/ler", verificarToken, async (req, res) => {
       .json({ status: "erro", mensagem: "Erro interno no servidor." });
   }
 });
+app.post('/api/scanner/confirmar', verificarToken, async (req, res) => {
+    const { id_inscricaoAtividade } = req.body;
+    const idOrganizador = req.usuario.id;
 
-app.post("/api/scanner/confirmar", verificarToken, async (req, res) => {
-  const { id_inscricaoAtividade } = req.body;
-  const idOrganizador = req.usuario.id;
+    // Adicione este console.log para vermos o que o Frontend está mandando:
+    console.log("➡️ DADOS RECEBIDOS PARA CHECK-IN:", req.body);
 
-  try {
-    await db.execute(
-      "INSERT INTO RegistroPresenca (id_inscricaoAtividade, idOrganizador) VALUES (?, ?)",
-      [id_inscricaoAtividade, idOrganizador],
-    );
-
-    res
-      .status(200)
-      .json({ mensagem: "Presença confirmada e salva com sucesso!" });
-  } catch (erro) {
-    res
-      .status(500)
-      .json({ erro: "Erro ao gravar a presença no banco de dados." });
-  }
+    try {
+        await db.execute('INSERT INTO RegistroPresenca (id_inscricaoAtividade, idOrganizador) VALUES (?, ?)', 
+        [id_inscricaoAtividade, idOrganizador]);
+        
+        res.status(200).json({ mensagem: "Presença confirmada e salva com sucesso!" });
+    } catch (erro) {
+        // ✨ AGORA SIM! O erro vai aparecer no Log do Render:
+        console.error("❌ ERRO GRAVE AO CONFIRMAR PRESENÇA:", erro);
+        
+        // E também vai aparecer na tela do seu navegador:
+        res.status(500).json({ erro: "Erro ao gravar: " + (erro.sqlMessage || erro.message) });
+    }
 });
 
 app.delete("/api/inscricao/:id_inscricao", verificarToken, async (req, res) => {
