@@ -25,6 +25,24 @@ export default function FormularioAtividade({
           required 
         />
       </div>
+      <div className="form-group">
+        <label>Tipo de Atividade</label>
+        <select
+          name="tipoAtividade"
+          value={atividadeData.tipoAtividade || ''}
+          onChange={(e) => setAtividadeData(prev => ({ ...prev, tipoAtividade: e.target.value }))}
+          required
+        >
+          <option value="" disabled>Selecione o tipo...</option>
+          <option value="Palestra">Palestra</option>
+          <option value="Minicurso">Minicurso</option>
+          <option value="Workshop">Workshop</option>
+          <option value="Mesa Redonda">Mesa Redonda</option>
+          <option value="Apresentação de Trabalho">Apresentação de Trabalho</option>
+          <option value="Visita Técnica">Visita Técnica</option>
+          <option value="Outro">Outro</option>
+        </select>
+      </div>
       <div className="form-row">
         <div className="form-group">
           <label>Data</label>

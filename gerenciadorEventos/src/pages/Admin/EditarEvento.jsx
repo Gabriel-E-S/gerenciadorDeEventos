@@ -18,20 +18,19 @@ export default function EditarEvento() {
   });
   
   const [imagemEvento, setImagemEvento] = useState(null);
-  
   const [listaAtividades, setListaAtividades] = useState([]);
   const [listaOrganizadores, setListaOrganizadores] = useState([]); 
   const [carregando, setCarregando] = useState(true);
 
   const [atividadeEditandoId, setAtividadeEditandoId] = useState(null); 
   const [atividadeData, setAtividadeData] = useState({
-    tituloAtividade: '', dataAtividade: '', horaInicio: '', horaFim: '', capacidade: ''
+    tituloAtividade: '', tipoAtividade: '', dataAtividade: '', horaInicio: '', horaFim: '', capacidade: ''
   });
 
   const [mostrandoFormNova, setMostrandoFormNova] = useState(false);
   const [novaAtividadeData, setNovaAtividadeData] = useState({
-    tituloAtividade: '', dataAtividade: '', horaInicio: '', horaFim: '', capacidade: ''
-  });     
+    tituloAtividade: '', tipoAtividade: '', dataAtividade: '', horaInicio: '', horaFim: '', capacidade: ''
+  });      
 
   const [metricas, setMetricas] = useState({ totalInscritos: 0, totalCheckins: 0, taxaComparecimento: 0, numeroVagas: null, taxaOcupacao: null });
 
@@ -49,7 +48,6 @@ export default function EditarEvento() {
 
   const carregarDados = async () => {
     try {
-      
       const resEvento = await fetch(`https://gerenciadordeeventos.onrender.com/api/eventos/${id}`);
       if (resEvento.ok) {
         const dados = await resEvento.json();
@@ -61,7 +59,7 @@ export default function EditarEvento() {
           local: dados.local || '',
           numeroVagas: dados.numeroVagas || '',
           idOrganizador: dados.id_usuario_gerente || '',
-          preco: dados.preco || 0
+          preco: dados.preco !== null && dados.preco !== undefined ? dados.preco : ''
         });
       } else {
         alert("Evento não encontrado.");
@@ -96,7 +94,6 @@ export default function EditarEvento() {
 
   const handleAdicionarStaff = async () => {
     const emailStaff = prompt("Digite o e-mail do aluno que vai ajudar no Scanner:");
-    
     if (!emailStaff) return; 
 
     try {
@@ -109,7 +106,6 @@ export default function EditarEvento() {
             body: JSON.stringify({ email: emailStaff })
         });
         const data = await res.json();
-        
         if(res.ok) alert("ok " + data.mensagem);
         else alert("erro " + data.erro);
 
@@ -157,6 +153,7 @@ export default function EditarEvento() {
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenSessao}` },
         body: JSON.stringify({
           titulo: atividadeData.tituloAtividade,
+          tipo: atividadeData.tipoAtividade,
           data: atividadeData.dataAtividade,
           horarioInicio: atividadeData.horaInicio,
           horarioFim: atividadeData.horaFim,
@@ -186,6 +183,7 @@ export default function EditarEvento() {
         body: JSON.stringify({
           id_evento: id, 
           titulo: novaAtividadeData.tituloAtividade,
+          tipo: novaAtividadeData.tipoAtividade,
           data: novaAtividadeData.dataAtividade,
           horarioInicio: novaAtividadeData.horaInicio,
           horarioFim: novaAtividadeData.horaFim,
@@ -197,7 +195,7 @@ export default function EditarEvento() {
       if (resposta.ok) {
         alert("Nova atividade adicionada com sucesso!");
         setMostrandoFormNova(false); 
-        setNovaAtividadeData({ tituloAtividade: '', dataAtividade: '', horaInicio: '', horaFim: '', capacidade: '' }); 
+        setNovaAtividadeData({ tituloAtividade: '', tipoAtividade: '', dataAtividade: '', horaInicio: '', horaFim: '', capacidade: '' }); 
         carregarDados(); 
       } else {
         alert("Erro: " + dados.erro);
@@ -328,7 +326,6 @@ export default function EditarEvento() {
                 <li key={ativ.id_atividade} className="atividade-item-edit">
                   
                   {atividadeEditandoId === ativ.id_atividade ? (
-                    
                     <FormularioAtividade 
                       atividadeData={atividadeData}
                       setAtividadeData={setAtividadeData}
@@ -340,6 +337,10 @@ export default function EditarEvento() {
                     <div className="atividade-resumo">
                       <div>
                         <strong>{ativ.titulo}</strong>
+                        {/* Exibindo o Tipo abaixo do Título */}
+                        <p style={{ color: 'var(--primary-blue)', fontWeight: 'bold', fontSize: '0.8rem', marginTop: '2px' }}>
+                          {ativ.tipo || 'Geral'}
+                        </p>
                         <p>{formatarDataSimples(ativ.data)} • {ativ.horarioInicio} às {ativ.horarioFim}</p>
                         
                         <div className="atividade-estatisticas">
@@ -359,6 +360,7 @@ export default function EditarEvento() {
                             setAtividadeEditandoId(ativ.id_atividade);
                             setAtividadeData({
                               tituloAtividade: ativ.titulo,
+                              tipoAtividade: ativ.tipo || '', 
                               dataAtividade: formatarDataSimples(ativ.data),
                               horaInicio: ativ.horarioInicio,
                               horaFim: ativ.horarioFim,
@@ -382,7 +384,6 @@ export default function EditarEvento() {
           {mostrandoFormNova ? (
             <div className="nova-atividade-box">
               <h4 className="nova-atividade-titulo">Nova Atividade</h4>
-              
               <FormularioAtividade 
                 atividadeData={novaAtividadeData}
                 setAtividadeData={setNovaAtividadeData}
@@ -406,7 +407,6 @@ export default function EditarEvento() {
             Excluir Evento Inteiro
           </button>
         </div>
-
       </div> 
     </section>
   );

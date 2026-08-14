@@ -589,66 +589,33 @@ app.put(
   },
 );
 
-app.post("/api/atividades", verificarToken, async (req, res) => {
-  const {
-    id_evento,
-    titulo,
-    data,
-    horarioInicio,
-    horarioFim,
-    capacidadeMaxima,
-  } = req.body;
+app.post('/api/atividades', verificarToken, async (req, res) => {
+    const { id_evento, titulo, tipo, data, horarioInicio, horarioFim, capacidadeMaxima } = req.body;
 
-  const autorizado = await verificarDonoOuAdmin(
-    req.usuario.id,
-    req.usuario.perfil,
-    id_evento,
-  );
-  if (!autorizado) {
-    return res.status(403).json({
-      erro: "Acesso negado. Você não é o administrador deste evento.",
-    });
-  }
+    const autorizado = await verificarDonoOuAdmin(req.usuario.id, req.usuario.perfil, id_evento);
+    if (!autorizado) {
+        return res.status(403).json({ erro: "Acesso negado. Você não é o administrador deste evento." });
+    }
 
-  if (!id_evento || !titulo || !data || !horarioInicio || !horarioFim) {
-    return res
-      .status(400)
-      .json({ erro: "Todos os campos da atividade são obrigatórios." });
-  }
+    if (!id_evento || !titulo || !tipo || !data || !horarioInicio || !horarioFim) {
+        return res.status(400).json({ erro: "Todos os campos da atividade são obrigatórios." });
+    }
 
-  try {
-    const query = `
-            INSERT INTO Atividade (id_evento, titulo, data, horarioInicio, horarioFim, capacidadeMaxima)
-            VALUES (?, ?, ?, ?, ?, ?)
+    try {
+        const query = `
+            INSERT INTO Atividade (id_evento, titulo, tipo, data, horarioInicio, horarioFim, capacidadeMaxima)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         `;
-    await db.execute(query, [
-      id_evento,
-      titulo,
-      data,
-      horarioInicio,
-      horarioFim,
-      capacidadeMaxima || null,
-    ]);
+        await db.execute(query, [id_evento, titulo, tipo, data, horarioInicio, horarioFim, capacidadeMaxima || null]);
 
-    res.status(201).json({ mensagem: "Atividade adicionada com sucesso!" });
-  } catch (erro) {
-    console.error("Erro ao criar atividade:", erro);
-
-    const msgErro = erro.sqlMessage || erro.message || "";
-
-    if (msgErro.includes("chk_atividade_horarios")) {
-      return res.status(400).json({
-        erro: "O horário de término não pode ser anterior ou igual ao horário de início.",
-      });
+        res.status(201).json({ mensagem: "Atividade adicionada com sucesso!" });
+    } catch (erro) {
+        console.error("Erro ao criar atividade:", erro);
+        const msgErro = erro.sqlMessage || erro.message || "";
+        if (msgErro.includes('chk_atividade_horarios')) return res.status(400).json({ erro: "O horário de término não pode ser anterior ou igual ao início." });
+        if (msgErro.includes('capacidadeMaxima')) return res.status(400).json({ erro: "A capacidade deve ser maior que zero." });
+        res.status(500).json({ erro: "Erro interno do servidor: " + msgErro });
     }
-    if (msgErro.includes("capacidadeMaxima")) {
-      return res.status(400).json({
-        erro: "A capacidade de participantes deve ser um número maior que zero.",
-      });
-    }
-
-    res.status(500).json({ erro: "Erro interno do servidor: " + msgErro });
-  }
 });
 
 // Rota para buscar as atividades de um evento COM ESTATÍSTICAS INDIVIDUAIS CORRIGIDAS
@@ -677,62 +644,36 @@ app.get("/api/eventos/:id/atividades", async (req, res) => {
   }
 });
 
-app.put("/api/atividades/:id", verificarToken, async (req, res) => {
-  const { titulo, data, horarioInicio, horarioFim, capacidadeMaxima } =
-    req.body;
-  const { id } = req.params;
+app.put('/api/atividades/:id', verificarToken, async (req, res) => {
+    const { titulo, tipo, data, horarioInicio, horarioFim, capacidadeMaxima } = req.body;
+    const { id } = req.params;
 
-  try {
-    const [ativRes] = await db.execute(
-      "SELECT id_evento FROM Atividade WHERE id_atividade = ?",
-      [id],
-    );
-    if (ativRes.length === 0)
-      return res.status(404).json({ erro: "Atividade não encontrada." });
+    try {
+        const [ativRes] = await db.execute('SELECT id_evento FROM Atividade WHERE id_atividade = ?', [id]);
+        if (ativRes.length === 0) return res.status(404).json({ erro: "Atividade não encontrada." });
 
-    const autorizado = await verificarDonoOuAdmin(
-      req.usuario.id,
-      req.usuario.perfil,
-      ativRes[0].id_evento,
-    );
-    if (!autorizado) return res.status(403).json({ erro: "Acesso negado." });
+        const autorizado = await verificarDonoOuAdmin(req.usuario.id, req.usuario.perfil, ativRes[0].id_evento);
+        if (!autorizado) return res.status(403).json({ erro: "Acesso negado." });
 
-    const dataFormatada = data.includes("T") ? data.split("T")[0] : data;
+        const dataFormatada = data.includes('T') ? data.split('T')[0] : data;
 
-    const query = `
+        const query = `
             UPDATE Atividade 
-            SET titulo = ?, data = ?, horarioInicio = ?, horarioFim = ?, capacidadeMaxima = ?
+            SET titulo = ?, tipo = ?, data = ?, horarioInicio = ?, horarioFim = ?, capacidadeMaxima = ?
             WHERE id_atividade = ?
         `;
-    await db.execute(query, [
-      titulo,
-      dataFormatada,
-      horarioInicio,
-      horarioFim,
-      capacidadeMaxima || null,
-      id,
-    ]);
-
-    res.status(200).json({ mensagem: "Atividade atualizada com sucesso!" });
-  } catch (erro) {
-    console.error("Erro ao atualizar atividade:", erro);
-
-    const msgErro = erro.sqlMessage || erro.message || "";
-
-    if (msgErro.includes("chk_atividade_horarios")) {
-      return res.status(400).json({
-        erro: "O horário de término não pode ser anterior ou igual ao horário de início.",
-      });
+        await db.execute(query, [titulo, tipo, dataFormatada, horarioInicio, horarioFim, capacidadeMaxima || null, id]);
+        
+        res.status(200).json({ mensagem: "Atividade atualizada com sucesso!" });
+    } catch (erro) {
+        console.error("Erro ao atualizar atividade:", erro);
+        const msgErro = erro.sqlMessage || erro.message || "";
+        if (msgErro.includes('chk_atividade_horarios')) return res.status(400).json({ erro: "O horário de término não pode ser anterior ao início." });
+        if (msgErro.includes('capacidadeMaxima')) return res.status(400).json({ erro: "A capacidade deve ser maior que zero." });
+        res.status(500).json({ erro: "Erro interno do servidor: " + msgErro });
     }
-    if (msgErro.includes("capacidadeMaxima")) {
-      return res.status(400).json({
-        erro: "A capacidade de participantes deve ser um número maior que zero.",
-      });
-    }
-
-    res.status(500).json({ erro: "Erro interno do servidor: " + msgErro });
-  }
 });
+
 app.get("/api/atividades", async (req, res) => {
   try {
     const query = `
@@ -1091,46 +1032,59 @@ app.delete("/api/eventos/:id", verificarToken, async (req, res) => {
 app.get("/api/eventos/:id/relatorio", verificarToken, async (req, res) => {
   const { id } = req.params;
 
-  const autorizado = await verificarDonoOuAdmin(
-    req.usuario.id,
-    req.usuario.perfil,
-    id,
-  );
-  if (!autorizado)
-    return res.status(403).json({
-      erro: "Acesso negado. Você não tem permissão para extrair relatórios deste evento.",
-    });
+  const autorizado = await verificarDonoOuAdmin(req.usuario.id, req.usuario.perfil, id);
+  if (!autorizado) {
+    return res.status(403).json({ erro: "Acesso negado. Você não tem permissão para extrair relatórios." });
+  }
 
   try {
     const query = `
             SELECT 
                 u.nome AS Participante,
                 u.email AS Email,
-                COALESCE(u.ra, u.cpf, 'N/I') AS Documento,
+                IFNULL(NULLIF(u.cpf, ''), 'N/I') AS CPF,
+                IFNULL(NULLIF(u.ra, ''), 'N/I') AS RA,
                 a.titulo AS Atividade,
+                IFNULL(a.tipo, 'Não Informado') AS TipoAtividade,
                 DATE_FORMAT(a.data, '%d/%m/%Y') AS Data,
                 a.horarioInicio AS Inicio,
                 a.horarioFim AS Fim,
                 ROUND(TIME_TO_SEC(TIMEDIFF(a.horarioFim, a.horarioInicio)) / 3600, 1) AS CargaHoraria,
                 IF(rp.id_registroPresenca IS NOT NULL, 'Presente', 'Ausente') AS Status,
                 COALESCE(uo.nome, '-') AS ValidadoPor,
-                IF(rp.dataHoraLeitura IS NOT NULL, DATE_FORMAT(CONVERT_TZ(rp.dataHoraLeitura, '+00:00', '-03:00'), '%d/%m/%Y %H:%i:%s'), '-') AS HorarioValidacao
+                IF(rp.dataHoraLeitura IS NOT NULL, DATE_FORMAT(CONVERT_TZ(rp.dataHoraLeitura, '+00:00', '-03:00'), '%d/%m/%Y %H:%i:%s'), '-') AS HorarioValidacao,
+                CONCAT(
+                    ROUND(
+                        IFNULL(
+                            (SELECT SUM(TIME_TO_SEC(TIMEDIFF(a2.horarioFim, a2.horarioInicio)))
+                             FROM InscricaoAtividade ia2 
+                             JOIN Atividade a2 ON ia2.id_atividade = a2.id_atividade 
+                             JOIN RegistroPresenca rp2 ON ia2.id_inscricaoAtividade = rp2.id_inscricaoAtividade 
+                             WHERE ia2.id_usuario = u.id_usuario AND a2.id_evento = ?), 0
+                        ) 
+                        / 
+                        NULLIF((SELECT SUM(TIME_TO_SEC(TIMEDIFF(a3.horarioFim, a3.horarioInicio)))
+                         FROM Atividade a3 
+                         WHERE a3.id_evento = ?), 0) * 100
+                    , 1), 
+                '%') AS FrequenciaGlobal
             FROM InscricaoAtividade ia
             JOIN Usuario u ON ia.id_usuario = u.id_usuario
             JOIN Atividade a ON ia.id_atividade = a.id_atividade
             LEFT JOIN RegistroPresenca rp ON ia.id_inscricaoAtividade = rp.id_inscricaoAtividade
-            LEFT JOIN Usuario uo ON rp.id_organizador = uo.id_usuario
+            LEFT JOIN Usuario uo ON rp.id_organizador = uo.id_usuario 
             WHERE a.id_evento = ?
-            ORDER BY a.data ASC, a.horarioInicio ASC, u.nome ASC
+            ORDER BY u.nome ASC, a.data ASC, a.horarioInicio ASC
         `;
 
-    const [relatorio] = await db.execute(query, [id]);
+    const [relatorio] = await db.execute(query, [id, id, id]);
     res.status(200).json(relatorio);
   } catch (erro) {
     console.error("Erro ao gerar relatório:", erro);
     res.status(500).json({ erro: "Erro ao exportar os dados do evento." });
   }
 });
+
 app.post("/api/admin/organizadores", verificarToken, async (req, res) => {
   if (req.usuario.perfil !== "ADMINISTRADOR") {
     return res.status(403).json({

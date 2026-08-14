@@ -10,7 +10,6 @@ export default function NovoEvento() {
   const [idEventoCriado, setIdEventoCriado] = useState(null);
   const [listaOrganizadores, setListaOrganizadores] = useState([]); 
 
-  
   const [eventoData, setEventoData] = useState({
     titulo: '', descricao: '', dataInicio: '', dataFim: '', local: '', numeroVagas: '', idOrganizador: '', preco: ''
   });
@@ -18,7 +17,7 @@ export default function NovoEvento() {
   const [imagemEvento, setImagemEvento] = useState(null);
 
   const [atividadeData, setAtividadeData] = useState({
-    tituloAtividade: '', dataAtividade: '', horaInicio: '', horaFim: '', capacidade: ''
+    tituloAtividade: '', tipoAtividade: '', dataAtividade: '', horaInicio: '', horaFim: '', capacidade: ''
   });
 
   useEffect(() => {
@@ -51,7 +50,6 @@ export default function NovoEvento() {
       formData.append('local', eventoData.local);
       formData.append('numeroVagas', eventoData.numeroVagas);
       formData.append('idOrganizador', eventoData.idOrganizador);
-
       formData.append('preco', eventoData.preco || 0);
       
       if (imagemEvento) {
@@ -90,6 +88,7 @@ export default function NovoEvento() {
         body: JSON.stringify({
           id_evento: idEventoCriado,
           titulo: atividadeData.tituloAtividade,
+          tipo: atividadeData.tipoAtividade,
           data: atividadeData.dataAtividade,
           horarioInicio: atividadeData.horaInicio,
           horarioFim: atividadeData.horaFim,
@@ -101,7 +100,7 @@ export default function NovoEvento() {
       if (resposta.ok) {
         alert("Atividade adicionada com sucesso!");
         setAtividadeData({
-          tituloAtividade: '', dataAtividade: '', horaInicio: '', horaFim: '', capacidade: ''
+          tituloAtividade: '', tipoAtividade: '', dataAtividade: '', horaInicio: '', horaFim: '', capacidade: ''
         });
       } else {
         alert("Erro: " + dados.erro);
@@ -136,9 +135,8 @@ export default function NovoEvento() {
                   atividadeData={atividadeData}
                   setAtividadeData={setAtividadeData}
                   onSubmit={handleAdicionarAtividade}
-          
                   onFinalizar={() => setAtividadeData({
-                    tituloAtividade: '', dataAtividade: '', horaInicio: '', horaFim: '', capacidade: ''
+                    tituloAtividade: '', tipoAtividade: '', dataAtividade: '', horaInicio: '', horaFim: '', capacidade: ''
                   })}
                   textoBotaoPrincipal="Salvar Nova Atividade"
                   textoBotaoSecundario="Cancelar / Limpar"
