@@ -15,6 +15,8 @@ import EditarEvento from './pages/Admin/EditarEvento';
 import DetalhesEvento from './pages/Public/DetalhesEvento';
 import CadastroOrganizador from './pages/Admin/CadastroOrganizador';
 import EditarPerfil from './pages/Public/EditarPerfil';
+import PoliticaPrivacidade from './pages/Public/PoliticaPrivacidade';
+import TermosDeUso from './pages/Public/TermosDeUso';
 
 export default function App() {
   return (
@@ -67,6 +69,9 @@ export default function App() {
                 <CadastroOrganizador />
               </ProtectedRoute>
             } />
+
+            <Route path="/privacidade" element={<PoliticaPrivacidade />} />
+            <Route path="/termos" element={<TermosDeUso />} />
 
         </Routes>
       </main>
