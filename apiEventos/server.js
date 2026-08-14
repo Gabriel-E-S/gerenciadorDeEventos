@@ -1119,7 +1119,7 @@ app.get("/api/eventos/:id/relatorio", verificarToken, async (req, res) => {
             JOIN Usuario u ON ia.id_usuario = u.id_usuario
             JOIN Atividade a ON ia.id_atividade = a.id_atividade
             LEFT JOIN RegistroPresenca rp ON ia.id_inscricaoAtividade = rp.id_inscricaoAtividade
-            LEFT JOIN Usuario uo ON rp.idOrganizador = uo.id_usuario
+            LEFT JOIN Usuario uo ON rp.id_organizador = uo.id_usuario
             WHERE a.id_evento = ?
             ORDER BY a.data ASC, a.horarioInicio ASC, u.nome ASC
         `;
