@@ -626,7 +626,7 @@ app.get("/api/eventos/:id/atividades", async (req, res) => {
     const query = `
             SELECT 
                 a.*,
-                COUNT(DISTINCT ia.id_inscricaoAtividade) AS vagasPreenchidas, 
+                COUNT(DISTINCT ia.id_inscricaoAtividade) AS vagasOcupadas, 
                 COUNT(DISTINCT rp.id_registroPresenca) AS checkinsRealizados   
             FROM Atividade a
             LEFT JOIN InscricaoAtividade ia ON a.id_atividade = ia.id_atividade
