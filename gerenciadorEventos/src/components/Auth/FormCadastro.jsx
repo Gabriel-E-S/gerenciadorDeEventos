@@ -1,15 +1,21 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from 'react-router-dom';
 
-export default function FormCadastro({ onSubmit, isCarregando }) {
+export default function FormCadastro({ onSubmit, isCarregando, dadosIniciais }) {
   const [nome, setNome] = useState("");
-  // Estados separados para CPF e RA
   const [cpf, setCpf] = useState("");
   const [ra, setRa] = useState("");
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [fotoPerfil, setFotoPerfil] = useState(null);
   const [aceitouTermos, setAceitouTermos] = useState(false);
+
+  useEffect(() => {
+    if (dadosIniciais) {
+      setNome(dadosIniciais.nome || "");
+      setEmail(dadosIniciais.email || "");
+    }
+  }, [dadosIniciais]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -75,7 +81,7 @@ export default function FormCadastro({ onSubmit, isCarregando }) {
           onChange={(e) => setEmail(e.target.value)}
           placeholder="seu@email.com"
           required
-          disabled={isCarregando}
+          disabled={isCarregando || (dadosIniciais && dadosIniciais.email)} 
         />
       </div>
 
@@ -85,7 +91,7 @@ export default function FormCadastro({ onSubmit, isCarregando }) {
           type="password"
           value={senha}
           onChange={(e) => setSenha(e.target.value)}
-          placeholder="sua senha"
+          placeholder="Sua senha para acesso local"
           required
           disabled={isCarregando}
         />

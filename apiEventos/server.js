@@ -3,6 +3,8 @@ const cors = require("cors");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { MercadoPagoConfig, Payment, Preference } = require("mercadopago");
+const { OAuth2Client } = require('google-auth-library');
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 require("dotenv").config();
 
@@ -1517,6 +1519,68 @@ app.put(
     }
   },
 );
+
+app.post('/api/auth/google', async (req, res) => {
+    const { token_google } = req.body;
+
+    if (!token_google) {
+        return res.status(400).json({ erro: "Token do Google não fornecido." });
+    }
+
+    try {
+        // Valida o token gerado no frontend diretamente com os servidores do Google
+        const ticket = await googleClient.verifyIdToken({
+            idToken: token_google,
+            audience: process.env.GOOGLE_CLIENT_ID,
+        });
+        
+        const payload = ticket.getPayload();
+        const { email, name } = payload; // Extraímos apenas e-mail e nome! Ignoramos a foto do Google.
+
+        // Verifica se o e-mail já está no nosso banco de dados
+        const [usuarios] = await db.execute('SELECT * FROM Usuario WHERE email = ?', [email]);
+
+        if (usuarios.length > 0) {
+            // CENÁRIO 1: Usuário já existe! Fazemos o login normal.
+            const usuario = usuarios[0];
+            const tokenSessao = jwt.sign(
+                { id: usuario.id_usuario, perfil: usuario.tipoPerfil },
+                process.env.JWT_SECRET,
+                { expiresIn: '8h' }
+            );
+
+            const [equipe] = await db.execute('SELECT id_evento FROM EquipeEvento WHERE id_usuario = ? LIMIT 1', [usuario.id_usuario]);
+            const isStaff = equipe.length > 0;
+
+            return res.status(200).json({
+                acao: "login",
+                mensagem: "Login realizado com sucesso via Google!",
+                token: tokenSessao,
+                usuario: {
+                    id: usuario.id_usuario,
+                    nome: usuario.nome,
+                    email: usuario.email,
+                    perfil: usuario.tipoPerfil,
+                    isStaff: isStaff,
+                    documento: usuario.cpf || usuario.ra,
+                    fotoUrl: usuario.fotoUrl || null
+                }
+            });
+        } else {
+            // CENÁRIO 2: Usuário não existe. Mandamos os dados para a tela de cadastro preencher automático.
+            return res.status(202).json({
+                acao: "completar_cadastro",
+                mensagem: "Finalize seu cadastro adicionando seus documentos e sua foto.",
+                dados_sugeridos: { nome: name, email: email }
+            });
+        }
+
+    } catch (erro) {
+        console.error("Erro na validação do Google:", erro);
+        res.status(401).json({ erro: "Assinatura do Google inválida ou expirada." });
+    }
+});
+
 
 const PORT = process.env.DB_PORT;
 app.listen(PORT, () => {
