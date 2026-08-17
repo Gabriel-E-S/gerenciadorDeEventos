@@ -4,7 +4,7 @@ import './CardAtividade.css';
 export default function CardAtividade({ atividade, jaInscrito, onInscrever }) {
   const dataF = new Date(atividade.data).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
   const limite = atividade.capacidadeMaxima;
-  const inscritos = atividade.vagasPreenchidas || 0;
+  const inscritos = atividade.vagasOcupadas || 0;
   
   const dataLimpa = atividade.data.split('T')[0]; 
   const dataHoraFim = new Date(`${dataLimpa}T${atividade.horarioFim}`);
