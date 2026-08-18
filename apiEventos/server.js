@@ -1558,76 +1558,87 @@ app.get("/api/usuario/perfil", verificarToken, async (req, res) => {
 });
 
 // Atualizar os dados e/ou a foto
-app.put(
-  "/api/usuario/perfil",
-  verificarToken,
-  upload.single("fotoPerfil"),
-  async (req, res) => {
-    const { nome, email, senhaNova } = req.body;
+app.put('/api/usuario/perfil', verificarToken, upload.single('fotoPerfil'), async (req, res) => {
+    
+    const { nome, email, senhaAntiga, senhaNova } = req.body;
     const id_usuario = req.usuario.id;
 
     if (!nome || !email) {
-      return res.status(400).json({ erro: "Nome e e-mail são obrigatórios." });
+        return res.status(400).json({ erro: "Nome e e-mail são obrigatórios." });
     }
 
     try {
-      const [emailExiste] = await db.execute(
-        "SELECT id_usuario FROM Usuario WHERE email = ? AND id_usuario != ?",
-        [email, id_usuario],
-      );
-      if (emailExiste.length > 0)
-        return res
-          .status(400)
-          .json({ erro: "Este e-mail já está em uso por outra conta." });
+        
+        const [emailExiste] = await db.execute(
+            'SELECT id_usuario FROM Usuario WHERE email = ? AND id_usuario != ?',
+            [email, id_usuario]
+        );
+        if (emailExiste.length > 0) return res.status(400).json({ erro: "Este e-mail já está em uso por outra conta." });
 
-      let url_imagem = null;
+        let senhaHashNova = null;
+        
+        if (senhaNova) {
+            
+            if (!senhaAntiga) {
+                return res.status(400).json({ erro: "Para alterar a senha, você deve informar a sua senha atual de segurança." });
+            }
 
-      if (req.file) {
-        url_imagem = await new Promise((resolve, reject) => {
-          const uploadStream = cloudinary.uploader.upload_stream(
-            {
-              folder: "eventos_perfil",
-              format: "jpg",
-              transformation: [{ width: 400, height: 400, crop: "fill" }],
-            },
-            (error, result) => {
-              if (error) reject(error);
-              else resolve(result.secure_url);
-            },
-          );
-          uploadStream.end(req.file.buffer);
+            const [usuarios] = await db.execute('SELECT senha FROM Usuario WHERE id_usuario = ?', [id_usuario]);
+            
+            if (usuarios.length === 0) return res.status(404).json({ erro: "Usuário não encontrado." });
+
+            const senhaValida = await bcrypt.compare(senhaAntiga, usuarios[0].senha);
+            
+            if (!senhaValida) {
+                return res.status(401).json({ erro: "A senha atual está incorreta. Acesso negado." });
+            }
+
+            senhaHashNova = await bcrypt.hash(senhaNova, 10);
+        }
+
+        let url_imagem = null;
+
+        if (req.file) {
+            url_imagem = await new Promise((resolve, reject) => {
+                const uploadStream = cloudinary.uploader.upload_stream(
+                    { folder: 'eventos_perfil', format: 'jpg', transformation: [{ width: 400, height: 400, crop: 'fill' }] },
+                    (error, result) => {
+                        if (error) reject(error);
+                        else resolve(result.secure_url);
+                    }
+                );
+                uploadStream.end(req.file.buffer);
+            });
+        }
+
+        let query = 'UPDATE Usuario SET nome = ?, email = ?';
+        const parametros = [nome, email];
+
+        if (senhaHashNova) {
+            query += ', senha = ?';
+            parametros.push(senhaHashNova);
+        }
+
+        if (url_imagem) {
+            query += ', fotoUrl = ?';
+            parametros.push(url_imagem);
+        }
+
+        query += ' WHERE id_usuario = ?';
+        parametros.push(id_usuario);
+
+        await db.execute(query, parametros);
+
+        res.status(200).json({ 
+            mensagem: "Perfil atualizado com sucesso!",
+            fotoUrl: url_imagem 
         });
-      }
 
-      let query = "UPDATE Usuario SET nome = ?, email = ?";
-      const parametros = [nome, email];
-
-      if (senhaNova) {
-        const senhaHash = await bcrypt.hash(senhaNova, 10);
-        query += ", senha = ?";
-        parametros.push(senhaHash);
-      }
-
-      if (url_imagem) {
-        query += ", fotoUrl = ?";
-        parametros.push(url_imagem);
-      }
-
-      query += " WHERE id_usuario = ?";
-      parametros.push(id_usuario);
-
-      await db.execute(query, parametros);
-
-      res.status(200).json({
-        mensagem: "Perfil atualizado com sucesso!",
-        fotoUrl: url_imagem,
-      });
     } catch (erro) {
-      console.error("Erro ao atualizar perfil:", erro);
-      res.status(500).json({ erro: "Erro interno ao atualizar perfil." });
+        console.error("[ERRO_BD] Falha ao atualizar perfil:", erro);
+        res.status(500).json({ erro: "Erro interno ao processar a atualização do perfil." });
     }
-  },
-);
+});
 
 app.post('/api/auth/google', async (req, res) => {
     const { token_google } = req.body;

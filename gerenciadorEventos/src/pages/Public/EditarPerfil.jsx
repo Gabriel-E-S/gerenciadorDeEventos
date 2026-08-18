@@ -16,6 +16,7 @@ export default function EditarPerfil() {
   const [perfilData, setPerfilData] = useState({
     nome: '',
     email: '',
+    senhaAntiga: '', 
     senhaNova: '',
     fotoUrl: ''
   });
@@ -33,6 +34,7 @@ export default function EditarPerfil() {
           setPerfilData({
             nome: dados.nome,
             email: dados.email,
+            senhaAntiga: '',
             senhaNova: '', 
             fotoUrl: dados.fotoUrl
           });
@@ -56,13 +58,18 @@ export default function EditarPerfil() {
     const file = e.target.files[0];
     if (file) {
       setNovaFotoArquivo(file);
-      
       setFotoPreview(URL.createObjectURL(file));
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (perfilData.senhaNova && !perfilData.senhaAntiga) {
+        alert("Proteção de Segurança: Você precisa digitar sua Senha Atual para poder cadastrar uma Nova Senha.");
+        return;
+    }
+
     setSalvando(true);
 
     const formData = new FormData();
@@ -71,6 +78,7 @@ export default function EditarPerfil() {
     
     if (perfilData.senhaNova) {
       formData.append('senhaNova', perfilData.senhaNova);
+      formData.append('senhaAntiga', perfilData.senhaAntiga);
     }
     
     if (novaFotoArquivo) {
@@ -87,10 +95,15 @@ export default function EditarPerfil() {
       const dados = await resposta.json();
 
       if (resposta.ok) {
-        alert("✅ " + dados.mensagem);
-        // Atualiza a foto atual com a nova retornada pelo backend (se houver)
+        alert("Ok " + dados.mensagem);
+        
+        setPerfilData(prev => ({ 
+            ...prev, 
+            fotoUrl: dados.fotoUrl || prev.fotoUrl, 
+            senhaAntiga: '', 
+            senhaNova: '' 
+        }));
         if (dados.fotoUrl) {
-            setPerfilData(prev => ({ ...prev, fotoUrl: dados.fotoUrl, senhaNova: '' }));
             setFotoPreview(null);
             setNovaFotoArquivo(null);
         }
@@ -106,7 +119,6 @@ export default function EditarPerfil() {
 
   if (carregando) return <Loader mensagem="Carregando suas informações..." />;
 
-  // Decide qual foto mostrar: O preview novo, a foto do banco, ou o placeholder vazio
   const imagemExibida = fotoPreview || perfilData.fotoUrl || "https://res.cloudinary.com/demo/image/upload/d_avatar.png/non_existing_id.png";
 
   return (
@@ -153,11 +165,23 @@ export default function EditarPerfil() {
           </div>
 
           <div className="perfil-divisor">
-            <span>Segurança</span>
+            <span>Segurança da Conta</span>
           </div>
 
           <div className="form-group">
-            <label>Nova Senha (opcional)</label>
+            <label>Senha Atual</label>
+            <input 
+              type="password" 
+              name="senhaAntiga" 
+              value={perfilData.senhaAntiga} 
+              onChange={handleChange} 
+              placeholder="Obrigatória apenas se for alterar a senha" 
+              required={perfilData.senhaNova.length > 0} 
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Nova Senha</label>
             <input 
               type="password" 
               name="senhaNova" 
