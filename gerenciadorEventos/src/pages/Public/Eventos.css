@@ -114,11 +114,13 @@
 .btn-voltar {
   background: none;
   border: none;
-  color: var(--text-gray);
+  background-color: var(--dark-blue);
+  color: var(--white);
   font-weight: 600;
   cursor: pointer;
   margin-bottom: 1.5rem;
-  padding: 0;
+  padding: 5px;
+  border-radius: var(--radius-sm);
   font-size: 1rem;
   transition: var(--transition-fast);
 }
@@ -151,7 +153,19 @@
 
 .detalhes-descricao {
   color: var(--text-gray);
-  line-height: 1.6;
+  line-height: 1.7;
+  font-size: 1.05rem;
+  white-space: pre-wrap; 
+}
+
+.detalhes-descricao-container {
+  background-color: var(--white, #ffffff);
+  padding: 2.5rem;
+  border-radius: var(--radius-md);
+  margin-top: 2rem;
+  text-align: left; 
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+  border: 1px solid var(--border-color);
 }
 
 .atividades-lista h2 {

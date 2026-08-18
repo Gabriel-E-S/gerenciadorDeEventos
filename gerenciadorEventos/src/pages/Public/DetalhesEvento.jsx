@@ -187,12 +187,17 @@ export default function DetalhesEvento() {
             N° Inscritos: <strong>{evento.totalInscritos || 0}</strong> {evento.totalInscritos === 1 ? 'participante' : 'participantes'}
           </p>
 
-          <p className="detalhes-descricao">{evento.descricao || 'Nenhuma descrição detalhada fornecida.'}</p>
+          <div className="detalhes-descricao-container">
+            <h3 style={{ marginBottom: '1rem', color: 'var(--dark-blue)' }}>Sobre o Evento</h3>
+            <p className="detalhes-descricao">
+              {evento.descricao || 'Nenhuma descrição detalhada fornecida.'}
+            </p>
+          </div>
 
           <div className="area-pagamento-evento" style={{ marginTop: '30px' }}>
             {statusPagamento === 'PAGO' ? (
               <div style={{ padding: '15px 30px', backgroundColor: 'var(--primary-blue)', color: 'white', borderRadius: '8px', fontWeight: 'bold', display: 'inline-block' }}>
-                ✅ Inscrição Confirmada
+                Inscrição Confirmada
               </div>
             ) : (
               <button 
