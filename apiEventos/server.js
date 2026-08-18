@@ -708,79 +708,88 @@ app.get("/api/atividades", async (req, res) => {
   }
 });
 
-app.post("/api/inscricao", verificarToken, async (req, res) => {
-  const { id_atividade } = req.body;
-  const id_usuario = req.usuario.id;
+app.post('/api/inscricao', verificarToken, async (req, res) => {
+    const { id_atividade } = req.body;
+    const id_usuario = req.usuario.id;
 
-  try {
-    const [atividadeRes] = await db.execute(
-      "SELECT id_evento, capacidadeMaxima, data, horarioFim FROM Atividade WHERE id_atividade = ?",
-      [id_atividade],
-    );
-    if (atividadeRes.length === 0)
-      return res.status(404).json({ erro: "Atividade não encontrada." });
+    const conn = await db.getConnection();
 
-    const { id_evento, capacidadeMaxima, data, horarioFim } = atividadeRes[0];
+    try {
 
-    const [ingressoRes] = await db.execute(
-      "SELECT status_pagamento FROM InscricaoEvento WHERE id_usuario = ? AND id_evento = ?",
-      [id_usuario, id_evento],
-    );
+        await conn.beginTransaction();
 
-    if (
-      ingressoRes.length === 0 ||
-      ingressoRes[0].status_pagamento !== "PAGO"
-    ) {
-      return res.status(403).json({
-        erro: "Acesso bloqueado! Você precisa confirmar a inscrição/pagamento do Evento antes de escolher as atividades.",
-      });
+        const [atividadeRes] = await conn.execute(
+            'SELECT id_evento, capacidadeMaxima, data, horarioFim FROM Atividade WHERE id_atividade = ? FOR UPDATE', 
+            [id_atividade]
+        );
+        
+        if (atividadeRes.length === 0) {
+            await conn.rollback(); 
+            return res.status(404).json({ erro: "Atividade não encontrada." });
+        }
+
+        const { id_evento, capacidadeMaxima, data, horarioFim } = atividadeRes[0];
+
+        const [ingressoRes] = await conn.execute(
+            'SELECT status_pagamento FROM InscricaoEvento WHERE id_usuario = ? AND id_evento = ?',
+            [id_usuario, id_evento]
+        );
+
+        if (ingressoRes.length === 0 || ingressoRes[0].status_pagamento !== 'PAGO') {
+            await conn.rollback();
+            return res.status(403).json({ 
+                erro: "Acesso bloqueado! Você precisa confirmar a inscrição/pagamento do Evento antes de escolher as atividades." 
+            });
+        }
+
+        const dataFormatada = new Date(data).toISOString().split('T')[0];
+        const dataHoraFimAtividade = new Date(`${dataFormatada}T${horarioFim}-03:00`); 
+        const agora = new Date();
+
+        if (agora > dataHoraFimAtividade) {
+            await conn.rollback();
+            return res.status(400).json({ 
+                erro: "Inscrição recusada! Esta atividade já foi encerrada e não aceita novos participantes." 
+            });
+        }
+
+        const [inscricaoExistente] = await conn.execute(
+            'SELECT id_inscricaoAtividade FROM InscricaoAtividade WHERE id_usuario = ? AND id_atividade = ?', 
+            [id_usuario, id_atividade]
+        );
+        
+        if (inscricaoExistente.length > 0) {
+            await conn.rollback();
+            return res.status(400).json({ erro: "Você já realizou a sua inscrição nesta atividade." });
+        }
+
+        if (capacidadeMaxima && capacidadeMaxima > 0) {
+            const [contagemRes] = await conn.execute(
+                'SELECT COUNT(*) as totalInscritos FROM InscricaoAtividade WHERE id_atividade = ?', 
+                [id_atividade]
+            );
+            if (contagemRes[0].totalInscritos >= capacidadeMaxima) {
+                await conn.rollback();
+                return res.status(403).json({ erro: "Lotação esgotada! Não há mais vagas para esta atividade." });
+            }
+        }
+        
+        await conn.execute('INSERT INTO InscricaoAtividade (id_usuario, id_atividade) VALUES (?, ?)', [id_usuario, id_atividade]);
+
+        
+        await conn.commit();
+
+        res.status(201).json({ mensagem: "Inscrição realizada com sucesso! O QR Code já está no seu Dashboard." });
+
+    } catch (erro) {
+        
+        await conn.rollback();
+        console.error("Erro ao processar inscrição:", erro);
+        res.status(500).json({ erro: "Erro interno ao processar a inscrição." });
+    } finally {
+        
+        if (conn) conn.release();
     }
-
-    const dataFormatada = new Date(data).toISOString().split("T")[0];
-    const dataHoraFimAtividade = new Date(
-      `${dataFormatada}T${horarioFim}-03:00`,
-    );
-    const agora = new Date();
-
-    if (agora > dataHoraFimAtividade) {
-      return res.status(400).json({
-        erro: "Inscrição recusada! Esta atividade já foi encerrada e não aceita novos participantes.",
-      });
-    }
-
-    const [inscricaoExistente] = await db.execute(
-      "SELECT id_inscricaoAtividade FROM InscricaoAtividade WHERE id_usuario = ? AND id_atividade = ?",
-      [id_usuario, id_atividade],
-    );
-    if (inscricaoExistente.length > 0)
-      return res
-        .status(400)
-        .json({ erro: "Você já realizou a sua inscrição nesta atividade." });
-
-    if (capacidadeMaxima && capacidadeMaxima > 0) {
-      const [contagemRes] = await db.execute(
-        "SELECT COUNT(*) as totalInscritos FROM InscricaoAtividade WHERE id_atividade = ?",
-        [id_atividade],
-      );
-      if (contagemRes[0].totalInscritos >= capacidadeMaxima) {
-        return res.status(403).json({
-          erro: "Lotação esgotada! Não há mais vagas para esta atividade.",
-        });
-      }
-    }
-
-    const query =
-      "INSERT INTO InscricaoAtividade (id_usuario, id_atividade) VALUES (?, ?)";
-    await db.execute(query, [id_usuario, id_atividade]);
-
-    res.status(201).json({
-      mensagem:
-        "Inscrição realizada com sucesso! O QR Code já está no seu Dashboard.",
-    });
-  } catch (erro) {
-    console.error("Erro ao processar inscrição:", erro);
-    res.status(500).json({ erro: "Erro interno ao processar a inscrição." });
-  }
 });
 
 app.get("/api/meus-ingressos", verificarToken, async (req, res) => {
