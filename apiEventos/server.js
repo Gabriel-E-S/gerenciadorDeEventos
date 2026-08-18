@@ -1342,108 +1342,116 @@ app.get(
 // ==========================================
 // ROTA 2: CRIAR CHECKOUT PRO (Etiqueta Segura)
 // ==========================================
-app.post("/api/pagamentos/checkout-pro", verificarToken, async (req, res) => {
-  const { id_evento } = req.body;
-  const id_usuario = req.usuario.id;
 
-  if (!id_evento)
-    return res.status(400).json({ erro: "ID do evento é obrigatório." });
+app.post('/api/pagamentos/checkout-pro', verificarToken, async (req, res) => {
+    const { id_evento } = req.body;
+    const id_usuario = req.usuario.id;
 
-  try {
-    const [inscricaoExiste] = await db.execute(
-      "SELECT status_pagamento FROM InscricaoEvento WHERE id_usuario = ? AND id_evento = ?",
-      [id_usuario, id_evento],
-    );
+    if (!id_evento) return res.status(400).json({ erro: "ID do evento é obrigatório." });
 
-    if (
-      inscricaoExiste.length > 0 &&
-      inscricaoExiste[0].status_pagamento === "PAGO"
-    ) {
-      return res
-        .status(400)
-        .json({ erro: "Você já está inscrito neste evento!" });
-    }
+    const conn = await db.getConnection();
 
-    const [eventos] = await db.execute(
-      "SELECT titulo, preco FROM Evento WHERE id_evento = ?",
-      [id_evento],
-    );
-    if (eventos.length === 0)
-      return res.status(404).json({ erro: "Evento não encontrado." });
+    try {
+        await conn.beginTransaction();
 
-    const evento = eventos[0];
-    const preco = Number(evento.preco);
-
-    // Inscrição Gratuita
-    if (preco === 0) {
-      if (inscricaoExiste.length === 0) {
-        await db.execute(
-          "INSERT INTO InscricaoEvento (id_usuario, id_evento, valor_pago, status_pagamento) VALUES (?, ?, ?, ?)",
-          [id_usuario, id_evento, 0.0, "PAGO"],
+        const [eventos] = await conn.execute(
+            'SELECT titulo, preco, numeroVagas FROM Evento WHERE id_evento = ? FOR UPDATE', 
+            [id_evento]
         );
-      } else {
-        await db.execute(
-          "UPDATE InscricaoEvento SET status_pagamento = ? WHERE id_usuario = ? AND id_evento = ?",
-          ["PAGO", id_usuario, id_evento],
+        
+        if (eventos.length === 0) {
+            await conn.rollback();
+            return res.status(404).json({ erro: "Evento não encontrado." });
+        }
+        
+        const evento = eventos[0];
+        const preco = Number(evento.preco);
+        const numeroVagas = evento.numeroVagas;
+
+        const [inscricaoExiste] = await conn.execute(
+            'SELECT status_pagamento FROM InscricaoEvento WHERE id_usuario = ? AND id_evento = ?',
+            [id_usuario, id_evento]
         );
-      }
-      return res.status(200).json({
-        status: "gratis",
-        mensagem: "Inscrição gratuita realizada com sucesso!",
-      });
+
+        if (inscricaoExiste.length > 0 && inscricaoExiste[0].status_pagamento === 'PAGO') {
+            await conn.rollback();
+            return res.status(400).json({ erro: "Você já está inscrito neste evento!" });
+        }
+
+        if (numeroVagas && numeroVagas > 0) {
+            
+            const [contagem] = await conn.execute(
+                'SELECT COUNT(*) as totalInscritos FROM InscricaoEvento WHERE id_evento = ?',
+                [id_evento]
+            );
+            
+            if (contagem[0].totalInscritos >= numeroVagas) {
+                await conn.rollback();
+                return res.status(403).json({ erro: "Lotação esgotada! Os ingressos para este evento acabaram." });
+            }
+        }
+
+        if (preco === 0) {
+            if (inscricaoExiste.length === 0) {
+                await conn.execute('INSERT INTO InscricaoEvento (id_usuario, id_evento, valor_pago, status_pagamento) VALUES (?, ?, ?, ?)', [id_usuario, id_evento, 0.00, 'PAGO']);
+            } else {
+                await conn.execute('UPDATE InscricaoEvento SET status_pagamento = ? WHERE id_usuario = ? AND id_evento = ?', ['PAGO', id_usuario, id_evento]);
+            }
+            
+            await conn.commit();
+            return res.status(200).json({ status: 'gratis', mensagem: "Inscrição gratuita realizada com sucesso!" });
+        }
+
+        if (inscricaoExiste.length === 0) {
+            await conn.execute('INSERT INTO InscricaoEvento (id_usuario, id_evento, valor_pago, status_pagamento) VALUES (?, ?, ?, ?)', [id_usuario, id_evento, preco, 'PENDENTE']);
+        }
+        
+        await conn.commit();
+        conn.release(); 
+
+        const [usuarios] = await db.execute('SELECT nome, email FROM Usuario WHERE id_usuario = ?', [id_usuario]);
+        const usuario = usuarios[0];
+
+        const preference = new Preference(client);
+        const respostaMP = await preference.create({
+            body: {
+                items: [
+                    {
+                        id: String(id_evento),
+                        title: `Inscrição: ${evento.titulo}`,
+                        quantity: 1,
+                        unit_price: preco,
+                        currency_id: 'BRL'
+                    }
+                ],
+                payer: {
+                    name: usuario.nome.split(' ')[0],
+                    email: usuario.email
+                },
+                back_urls: {
+                    success: `https://aki-xjvb.onrender.com/eventos/${id_evento}`,
+                    failure: `https://aki-xjvb.onrender.com/eventos/${id_evento}`,
+                    pending: `https://aki-xjvb.onrender.com/eventos/${id_evento}`
+                },
+                auto_return: 'approved',
+                external_reference: `USUARIO_${id_usuario}_EVENTO_${id_evento}`,
+                notification_url: 'https://gerenciadordeeventos.onrender.com/api/pagamentos/webhook'
+            }
+        });
+
+        res.status(200).json({ status: 'pendente', link_pagamento: respostaMP.init_point });
+
+    } catch (erro) {
+        
+        if (conn && !conn.connection._isCommitted) {
+            await conn.rollback();
+        }
+        console.error("Erro ao gerar link de pagamento:", erro);
+        res.status(500).json({ erro: "Erro interno ao gerar o pagamento." });
+    } finally {
+        
+        if (conn && conn.connection) conn.release();
     }
-
-    const [usuarios] = await db.execute(
-      "SELECT nome, email FROM Usuario WHERE id_usuario = ?",
-      [id_usuario],
-    );
-    const usuario = usuarios[0];
-
-    // Se não existir no banco, cria como PENDENTE
-    if (inscricaoExiste.length === 0) {
-      await db.execute(
-        "INSERT INTO InscricaoEvento (id_usuario, id_evento, valor_pago, status_pagamento) VALUES (?, ?, ?, ?)",
-        [id_usuario, id_evento, preco, "PENDENTE"],
-      );
-    }
-
-    // Criando a Preferência (Checkout Pro)
-    const preference = new Preference(client);
-    const respostaMP = await preference.create({
-      body: {
-        items: [
-          {
-            id: String(id_evento),
-            title: `Inscrição: ${evento.titulo}`,
-            quantity: 1,
-            unit_price: preco,
-            currency_id: "BRL",
-          },
-        ],
-        payer: {
-          name: usuario.nome.split(" ")[0],
-          email: usuario.email,
-        },
-        back_urls: {
-          success: `https://aki-xjvb.onrender.com/eventos/${id_evento}`,
-          failure: `https://aki-xjvb.onrender.com/eventos/${id_evento}`,
-          pending: `https://aki-xjvb.onrender.com/eventos/${id_evento}`,
-        },
-        auto_return: "approved",
-        external_reference: `USUARIO_${id_usuario}_EVENTO_${id_evento}`,
-
-        notification_url:
-          "https://gerenciadordeeventos.onrender.com/api/pagamentos/webhook",
-      },
-    });
-
-    res
-      .status(200)
-      .json({ status: "pendente", link_pagamento: respostaMP.init_point });
-  } catch (erro) {
-    console.error("Erro ao gerar link de pagamento:", erro);
-    res.status(500).json({ erro: "Erro interno ao gerar o pagamento." });
-  }
 });
 
 // ==========================================
