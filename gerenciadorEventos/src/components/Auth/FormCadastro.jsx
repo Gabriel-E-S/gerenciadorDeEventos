@@ -33,6 +33,10 @@ export default function FormCadastro({ onSubmit, isCarregando, dadosIniciais }) 
 
     formData.append('termos_aceitos', aceitouTermos);
 
+    if (dadosIniciais && dadosIniciais.google_id) {
+        formData.append("google_id", dadosIniciais.google_id);
+    }
+
     onSubmit(formData);
   };
 

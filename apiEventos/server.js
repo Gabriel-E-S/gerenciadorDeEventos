@@ -108,9 +108,9 @@ app.get("/api/status", async (req, res) => {
 });
 
 // Rota de cadastro.
-
 app.post("/api/cadastro", upload.single("fotoPerfil"), async (req, res) => {
-  const { nome, email, senha, cpf, ra, termos_aceitos } = req.body;
+
+  const { nome, email, senha, cpf, ra, termos_aceitos, google_id } = req.body;
 
   if (termos_aceitos !== "true") {
     return res.status(400).json({
@@ -161,11 +161,13 @@ app.post("/api/cadastro", upload.single("fotoPerfil"), async (req, res) => {
     }
 
     const query = `
-            INSERT INTO Usuario (nome, email, senha, cpf, ra, tipoPerfil, fotoUrl, termos_aceitos) 
-            VALUES (?, ?, ?, ?, ?, 'PARTICIPANTE', ?, ?)
+            INSERT INTO Usuario (nome, email, senha, cpf, ra, tipoPerfil, fotoUrl, termos_aceitos, google_id) 
+            VALUES (?, ?, ?, ?, ?, 'PARTICIPANTE', ?, ?, ?)
         `;
 
     const aceitou = termos_aceitos === "true" ? 1 : 0;
+    
+    
     await db.execute(query, [
       nome,
       email,
@@ -174,9 +176,9 @@ app.post("/api/cadastro", upload.single("fotoPerfil"), async (req, res) => {
       ra || null,
       fotoUrl,
       aceitou,
+      google_id || null
     ]);
 
-    
     res.status(201).json({ mensagem: "Conta criada com sucesso!" });
   } catch (erro) {
     console.error("Erro no cadastro:", erro);
@@ -902,24 +904,64 @@ app.post("/api/scanner/ler", verificarToken, async (req, res) => {
       .json({ status: "erro", mensagem: "Erro interno no servidor." });
   }
 });
+
 app.post('/api/scanner/confirmar', verificarToken, async (req, res) => {
     const { id_inscricaoAtividade } = req.body;
-    const idOrganizador = req.usuario.id;
-
-    // Adicione este console.log para vermos o que o Frontend está mandando:
-    console.log("➡️ DADOS RECEBIDOS PARA CHECK-IN:", req.body);
+    // Pega o ID e o Perfil de quem está fazendo a requisição
+    const id_organizador = req.usuario.id;
+    const perfil_organizador = req.usuario.perfil;
 
     try {
+        // 1. Descobrir a qual evento essa inscrição pertence e quem é o dono dele
+        const queryInfo = `
+            SELECT e.id_evento, e.id_usuario_gerente
+            FROM InscricaoAtividade ia
+            JOIN Atividade a ON ia.id_atividade = a.id_atividade
+            JOIN Evento e ON a.id_evento = e.id_evento
+            WHERE ia.id_inscricaoAtividade = ?
+        `;
+        const [infoRes] = await db.execute(queryInfo, [id_inscricaoAtividade]);
+
+        // Se a inscrição não existir, barra aqui
+        if (infoRes.length === 0) {
+            return res.status(404).json({ erro: "Inscrição não encontrada." });
+        }
+
+        const info = infoRes[0];
+        let autorizado = false;
+
+        // 2. Validação de Autorização (O coração da correção da V-02)
+        if (perfil_organizador === 'ADMINISTRADOR') {
+            autorizado = true; // Admin pode validar qualquer um
+        } else if (Number(info.id_usuario_gerente) === Number(id_organizador)) {
+            autorizado = true; // Dono do evento pode validar
+        } else {
+            // Verifica se é membro da equipe (Staff)
+            const [staff] = await db.execute('SELECT * FROM EquipeEvento WHERE id_evento = ? AND id_usuario = ?', [info.id_evento, id_organizador]);
+            if (staff.length > 0) autorizado = true;
+        }
+
+        // Se não for nenhum dos três, é um aluno tentando hackear o sistema!
+        if (!autorizado) {
+            return res.status(403).json({ erro: "Fraude bloqueada: Você não tem permissão para validar check-ins neste evento." });
+        }
+
+        // 3. Tudo certo! Gravar a presença no banco (com id_organizador correto)
         await db.execute('INSERT INTO RegistroPresenca (id_inscricaoAtividade, id_organizador) VALUES (?, ?)', 
-        [id_inscricaoAtividade, idOrganizador]);
+        [id_inscricaoAtividade, id_organizador]);
         
         res.status(200).json({ mensagem: "Presença confirmada e salva com sucesso!" });
-    } catch (erro) {
-        // ✨ AGORA SIM! O erro vai aparecer no Log do Render:
-        console.error("❌ ERRO GRAVE AO CONFIRMAR PRESENÇA:", erro);
         
-        // E também vai aparecer na tela do seu navegador:
-        res.status(500).json({ erro: "Erro ao gravar: " + (erro.sqlMessage || erro.message) });
+    } catch (erro) {
+        console.error("Erro na confirmação de presença:", erro);
+        
+        // Proteção extra: se alguém apertar o botão duas vezes rápido (duplo clique),
+        // o banco de dados vai reclamar de entrada duplicada. Nós tratamos isso aqui:
+        if (erro.code === 'ER_DUP_ENTRY') {
+            return res.status(400).json({ erro: "Este check-in já foi confirmado anteriormente." });
+        }
+        
+        res.status(500).json({ erro: "Erro ao gravar a presença no banco de dados." });
     }
 });
 
@@ -1528,21 +1570,34 @@ app.post('/api/auth/google', async (req, res) => {
     }
 
     try {
-        // Valida o token gerado no frontend diretamente com os servidores do Google
+        
         const ticket = await googleClient.verifyIdToken({
             idToken: token_google,
             audience: process.env.GOOGLE_CLIENT_ID,
         });
         
         const payload = ticket.getPayload();
-        const { email, name } = payload; // Extraímos apenas e-mail e nome! Ignoramos a foto do Google.
+        
+        const { email, name, sub: google_id, email_verified } = payload; 
 
-        // Verifica se o e-mail já está no nosso banco de dados
+        if (!email_verified) {
+            return res.status(403).json({ erro: "Acesso negado. O e-mail desta conta Google não possui verificação confirmada." });
+        }
+
         const [usuarios] = await db.execute('SELECT * FROM Usuario WHERE email = ?', [email]);
 
         if (usuarios.length > 0) {
-            // CENÁRIO 1: Usuário já existe! Fazemos o login normal.
+            // CENÁRIO 1: Usuário já existe!
             const usuario = usuarios[0];
+
+            if (!usuario.google_id) {
+                // Se a conta local existe (feita por senha), mas nunca logou com o Google,
+                await db.execute('UPDATE Usuario SET google_id = ? WHERE id_usuario = ?', [google_id, usuario.id_usuario]);
+            } else if (usuario.google_id !== google_id) {
+                // Se o e-mail bate, mas o ID do Google armazenado é diferente do atual, é uma tentativa de colisão.
+                return res.status(403).json({ erro: "Conflito de credenciais detectado. Por favor, faça login utilizando sua senha." });
+            }
+
             const tokenSessao = jwt.sign(
                 { id: usuario.id_usuario, perfil: usuario.tipoPerfil },
                 process.env.JWT_SECRET,
@@ -1567,11 +1622,11 @@ app.post('/api/auth/google', async (req, res) => {
                 }
             });
         } else {
-            // CENÁRIO 2: Usuário não existe. Mandamos os dados para a tela de cadastro preencher automático.
+            // CENÁRIO 2: Usuário não existe. 
             return res.status(202).json({
                 acao: "completar_cadastro",
                 mensagem: "Finalize seu cadastro adicionando seus documentos e sua foto.",
-                dados_sugeridos: { nome: name, email: email }
+                dados_sugeridos: { nome: name, email: email, google_id: google_id }
             });
         }
 
