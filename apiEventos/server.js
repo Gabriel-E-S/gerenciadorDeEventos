@@ -2,11 +2,21 @@ const express = require("express");
 const cors = require("cors");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const rateLimit = require('express-rate-limit');
+
 const { MercadoPagoConfig, Payment, Preference } = require("mercadopago");
 const { OAuth2Client } = require('google-auth-library');
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 require("dotenv").config();
+
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, 
+    max: 5, 
+    message: { erro: "Muitas tentativas de acesso detectadas. Por segurança, aguarde 15 minutos antes de tentar novamente." },
+    standardHeaders: true, 
+    legacyHeaders: false, 
+});
 
 const db = require("./db");
 
@@ -123,7 +133,7 @@ app.get("/api/status", async (req, res) => {
 });
 
 // Rota de cadastro.
-app.post("/api/cadastro", upload.single("fotoPerfil"), async (req, res) => {
+app.post("/api/cadastro", upload.single("fotoPerfil"),loginLimiter, async (req, res) => {
 
   const { nome, email, senha, cpf, ra, termos_aceitos, google_id } = req.body;
 
@@ -255,7 +265,7 @@ app.post(
   },
 );
 
-app.post("/api/login", async (req, res) => {
+app.post("/api/login", loginLimiter, async (req, res) => {
   const { email, senha } = req.body;
 
   if (!email || !senha) {
@@ -1640,7 +1650,7 @@ app.put('/api/usuario/perfil', verificarToken, upload.single('fotoPerfil'), asyn
     }
 });
 
-app.post('/api/auth/google', async (req, res) => {
+app.post('/api/auth/google', loginLimiter, async (req, res) => {
     const { token_google } = req.body;
 
     if (!token_google) {
