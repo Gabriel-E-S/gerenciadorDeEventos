@@ -28,7 +28,22 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ 
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: 5 * 1024 * 1024, 
+    },
+    fileFilter: (req, file, cb) => {
+        
+        const tiposPermitidos = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
+        
+        if (tiposPermitidos.includes(file.mimetype)) {
+            cb(null, true); 
+        } else {
+            cb(new Error('FORMATO_INVALIDO')); 
+        }
+    }
+});
 
 const verificarToken = (req, res, next) => {
   const headerAuth = req.headers["authorization"];
@@ -907,12 +922,12 @@ app.post("/api/scanner/ler", verificarToken, async (req, res) => {
 
 app.post('/api/scanner/confirmar', verificarToken, async (req, res) => {
     const { id_inscricaoAtividade } = req.body;
-    // Pega o ID e o Perfil de quem está fazendo a requisição
+    
     const id_organizador = req.usuario.id;
     const perfil_organizador = req.usuario.perfil;
 
     try {
-        // 1. Descobrir a qual evento essa inscrição pertence e quem é o dono dele
+        
         const queryInfo = `
             SELECT e.id_evento, e.id_usuario_gerente
             FROM InscricaoAtividade ia
@@ -922,7 +937,7 @@ app.post('/api/scanner/confirmar', verificarToken, async (req, res) => {
         `;
         const [infoRes] = await db.execute(queryInfo, [id_inscricaoAtividade]);
 
-        // Se a inscrição não existir, barra aqui
+        
         if (infoRes.length === 0) {
             return res.status(404).json({ erro: "Inscrição não encontrada." });
         }
@@ -930,23 +945,19 @@ app.post('/api/scanner/confirmar', verificarToken, async (req, res) => {
         const info = infoRes[0];
         let autorizado = false;
 
-        // 2. Validação de Autorização (O coração da correção da V-02)
         if (perfil_organizador === 'ADMINISTRADOR') {
-            autorizado = true; // Admin pode validar qualquer um
+            autorizado = true; 
         } else if (Number(info.id_usuario_gerente) === Number(id_organizador)) {
-            autorizado = true; // Dono do evento pode validar
+            autorizado = true; 
         } else {
-            // Verifica se é membro da equipe (Staff)
             const [staff] = await db.execute('SELECT * FROM EquipeEvento WHERE id_evento = ? AND id_usuario = ?', [info.id_evento, id_organizador]);
             if (staff.length > 0) autorizado = true;
         }
 
-        // Se não for nenhum dos três, é um aluno tentando hackear o sistema!
         if (!autorizado) {
             return res.status(403).json({ erro: "Fraude bloqueada: Você não tem permissão para validar check-ins neste evento." });
         }
 
-        // 3. Tudo certo! Gravar a presença no banco (com id_organizador correto)
         await db.execute('INSERT INTO RegistroPresenca (id_inscricaoAtividade, id_organizador) VALUES (?, ?)', 
         [id_inscricaoAtividade, id_organizador]);
         
@@ -955,8 +966,6 @@ app.post('/api/scanner/confirmar', verificarToken, async (req, res) => {
     } catch (erro) {
         console.error("Erro na confirmação de presença:", erro);
         
-        // Proteção extra: se alguém apertar o botão duas vezes rápido (duplo clique),
-        // o banco de dados vai reclamar de entrada duplicada. Nós tratamos isso aqui:
         if (erro.code === 'ER_DUP_ENTRY') {
             return res.status(400).json({ erro: "Este check-in já foi confirmado anteriormente." });
         }
@@ -1634,6 +1643,18 @@ app.post('/api/auth/google', async (req, res) => {
         console.error("Erro na validação do Google:", erro);
         res.status(401).json({ erro: "Assinatura do Google inválida ou expirada." });
     }
+});
+
+app.use((err, req, res, next) => {
+    if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+            return res.status(400).json({ erro: "O arquivo é muito grande! O tamanho máximo permitido é de 5MB." });
+        }
+    } else if (err.message === 'FORMATO_INVALIDO') {
+        return res.status(400).json({ erro: "Formato de arquivo não suportado. Envie apenas imagens JPG, PNG ou WEBP." });
+    }
+    
+    next(err);
 });
 
 
