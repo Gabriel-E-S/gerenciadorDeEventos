@@ -385,19 +385,19 @@ app.post(
         id_evento: result.insertId,
       });
     } catch (erro) {
-      console.error("Erro ao criar evento:", erro);
 
-      const msgErro = erro.sqlMessage || erro.message || "";
-      if (msgErro.includes("chk_evento_datas"))
-        return res
-          .status(400)
-          .json({ erro: "A data de fim não pode ser anterior ao início." });
-      if (msgErro.includes("numeroVagas"))
-        return res
-          .status(400)
-          .json({ erro: "O número de vagas deve ser maior que zero." });
+        console.error("[ERRO_BD] Falha ao salvar evento:", erro);
+        
+        const msgErro = erro.sqlMessage || erro.message || "";
+        
+        if (msgErro.includes('chk_evento_datas')) {
+            return res.status(400).json({ erro: "A data de fim não pode ser anterior ao início." });
+        }
+        if (msgErro.includes('numeroVagas')) {
+            return res.status(400).json({ erro: "O número de vagas deve ser maior que zero." });
+        }
 
-      res.status(500).json({ erro: "Erro interno do servidor: " + msgErro });
+        res.status(500).json({ erro: "Erro interno do servidor. A equipe técnica já foi notificada." });;
     }
   },
 );
@@ -505,7 +505,7 @@ app.put(
     } = req.body;
     const { id } = req.params;
 
-    console.log("➡️ DADOS RECEBIDOS (PUT):", req.body);
+    console.log("DADOS RECEBIDOS (PUT):", req.body);
 
     const autorizado = await verificarDonoOuAdmin(
       req.usuario.id,
@@ -603,7 +603,7 @@ app.put(
           .json({ erro: "O número de vagas deve ser maior que zero." });
       }
 
-      res.status(500).json({ erro: "Erro interno do servidor: " + msgErro });
+      res.status(500).json({ erro: "Erro interno do servidor: "});
     }
   },
 );
@@ -633,7 +633,7 @@ app.post('/api/atividades', verificarToken, async (req, res) => {
         const msgErro = erro.sqlMessage || erro.message || "";
         if (msgErro.includes('chk_atividade_horarios')) return res.status(400).json({ erro: "O horário de término não pode ser anterior ou igual ao início." });
         if (msgErro.includes('capacidadeMaxima')) return res.status(400).json({ erro: "A capacidade deve ser maior que zero." });
-        res.status(500).json({ erro: "Erro interno do servidor: " + msgErro });
+        res.status(500).json({ erro: "Erro interno do servidor. "});
     }
 });
 
@@ -689,7 +689,7 @@ app.put('/api/atividades/:id', verificarToken, async (req, res) => {
         const msgErro = erro.sqlMessage || erro.message || "";
         if (msgErro.includes('chk_atividade_horarios')) return res.status(400).json({ erro: "O horário de término não pode ser anterior ao início." });
         if (msgErro.includes('capacidadeMaxima')) return res.status(400).json({ erro: "A capacidade deve ser maior que zero." });
-        res.status(500).json({ erro: "Erro interno do servidor: " + msgErro });
+        res.status(500).json({ erro: "Erro interno do servidor." });
     }
 });
 
@@ -983,111 +983,152 @@ app.post('/api/scanner/confirmar', verificarToken, async (req, res) => {
     }
 });
 
+// ==========================================
+// 1. CANCELAR INSCRIÇÃO EM ATIVIDADE
+// ==========================================
 app.delete("/api/inscricao/:id_inscricao", verificarToken, async (req, res) => {
   const id_usuario = req.usuario.id;
   const { id_inscricao } = req.params;
 
+  const conn = await db.getConnection();
+
   try {
-    const [presencas] = await db.execute(
-      "SELECT * FROM RegistroPresenca WHERE id_inscricaoAtividade = ?",
-      [id_inscricao],
+    await conn.beginTransaction();
+
+    const [presencas] = await conn.execute(
+      "SELECT id_registroPresenca FROM RegistroPresenca WHERE id_inscricaoAtividade = ? FOR UPDATE",
+      [id_inscricao]
     );
-    if (presencas.length > 0)
+    
+    if (presencas.length > 0) {
+      await conn.rollback();
       return res.status(400).json({
         erro: "Cancelamento bloqueado: Seu check-in já foi confirmado.",
       });
+    }
 
-    const [resultado] = await db.execute(
+    const [resultado] = await conn.execute(
       "DELETE FROM InscricaoAtividade WHERE id_inscricaoAtividade = ? AND id_usuario = ?",
-      [id_inscricao, id_usuario],
+      [id_inscricao, id_usuario]
     );
 
-    if (resultado.affectedRows === 0)
-      return res
-        .status(404)
-        .json({ erro: "Inscrição não encontrada ou não pertence a você." });
+    if (resultado.affectedRows === 0) {
+      await conn.rollback();
+      return res.status(404).json({ erro: "Inscrição não encontrada ou não pertence a você." });
+    }
 
-    res
-      .status(200)
-      .json({ mensagem: "Inscrição cancelada com sucesso. Vaga liberada!" });
+    await conn.commit();
+    res.status(200).json({ mensagem: "Inscrição cancelada com sucesso. Vaga liberada!" });
+    
   } catch (erro) {
+    await conn.rollback();
+    console.error("Erro transacional ao cancelar inscrição:", erro);
     res.status(500).json({ erro: "Erro interno ao cancelar inscrição." });
+  } finally {
+    if (conn) conn.release();
   }
 });
 
-app.delete("/api/atividades/:id", verificarToken, async (req, res) => {
-  try {
-    const id_atividade = req.params.id;
 
+// ==========================================
+// 2. EXCLUIR ATIVIDADE ESPECÍFICA
+// ==========================================
+app.delete("/api/atividades/:id", verificarToken, async (req, res) => {
+  const id_atividade = req.params.id;
+
+  try {
     const [ativRes] = await db.execute(
       "SELECT id_evento FROM Atividade WHERE id_atividade = ?",
-      [id_atividade],
+      [id_atividade]
     );
-    if (ativRes.length === 0)
+    if (ativRes.length === 0) {
       return res.status(404).json({ erro: "Atividade não encontrada." });
+    }
 
     const autorizado = await verificarDonoOuAdmin(
       req.usuario.id,
       req.usuario.perfil,
-      ativRes[0].id_evento,
+      ativRes[0].id_evento
     );
-    if (!autorizado)
-      return res.status(403).json({
-        erro: "Acesso negado. Você não é o administrador deste evento.",
-      });
-
-    await db.execute(
-      "DELETE rp FROM RegistroPresenca rp JOIN InscricaoAtividade ia ON rp.id_inscricaoAtividade = ia.id_inscricaoAtividade WHERE ia.id_atividade = ?",
-      [id_atividade],
-    );
-    await db.execute("DELETE FROM InscricaoAtividade WHERE id_atividade = ?", [
-      id_atividade,
-    ]);
-    await db.execute("DELETE FROM Atividade WHERE id_atividade = ?", [
-      id_atividade,
-    ]);
-
-    res.status(200).json({
-      mensagem:
-        "Atividade e todas as inscrições nela vinculadas foram excluídas.",
-    });
+    if (!autorizado) {
+      return res.status(403).json({ erro: "Acesso negado. Você não é o administrador deste evento." });
+    }
   } catch (erro) {
-    console.error("Erro ao excluir atividade:", erro);
+    return res.status(500).json({ erro: "Erro ao validar permissões da atividade." });
+  }
+
+  const conn = await db.getConnection();
+
+  try {
+    await conn.beginTransaction();
+
+    await conn.execute(
+      "DELETE rp FROM RegistroPresenca rp JOIN InscricaoAtividade ia ON rp.id_inscricaoAtividade = ia.id_inscricaoAtividade WHERE ia.id_atividade = ?",
+      [id_atividade]
+    );
+    await conn.execute("DELETE FROM InscricaoAtividade WHERE id_atividade = ?", [id_atividade]);
+    await conn.execute("DELETE FROM Atividade WHERE id_atividade = ?", [id_atividade]);
+
+    await conn.commit();
+    res.status(200).json({ mensagem: "Atividade e todas as inscrições nela vinculadas foram excluídas." });
+    
+  } catch (erro) {
+    await conn.rollback();
+    console.error("Erro transacional ao excluir atividade:", erro);
     res.status(500).json({ erro: "Erro ao excluir a atividade." });
+  } finally {
+    if (conn) conn.release();
   }
 });
 
+// ==========================================
+// 3. EXCLUIR EVENTO COMPLETO
+// ==========================================
 app.delete("/api/eventos/:id", verificarToken, async (req, res) => {
   const id_evento = req.params.id;
 
-  const autorizado = await verificarDonoOuAdmin(
-    req.usuario.id,
-    req.usuario.perfil,
-    id_evento,
-  );
-  if (!autorizado)
-    return res.status(403).json({
-      erro: "Acesso negado. Você só pode excluir eventos que você mesmo criou.",
-    });
+  try {
+    const autorizado = await verificarDonoOuAdmin(
+      req.usuario.id,
+      req.usuario.perfil,
+      id_evento
+    );
+    if (!autorizado) {
+      return res.status(403).json({ erro: "Acesso negado. Você só pode excluir eventos que você mesmo criou." });
+    }
+  } catch (erro) {
+    return res.status(500).json({ erro: "Erro ao validar permissões do evento." });
+  }
+
+  const conn = await db.getConnection();
 
   try {
-    await db.execute(
-      "DELETE rp FROM RegistroPresenca rp JOIN InscricaoAtividade ia ON rp.id_inscricaoAtividade = ia.id_inscricaoAtividade JOIN Atividade a ON ia.id_atividade = a.id_atividade WHERE a.id_evento = ?",
-      [id_evento],
-    );
-    await db.execute(
-      "DELETE ia FROM InscricaoAtividade ia JOIN Atividade a ON ia.id_atividade = a.id_atividade WHERE a.id_evento = ?",
-      [id_evento],
-    );
-    await db.execute("DELETE FROM Atividade WHERE id_evento = ?", [id_evento]);
-    await db.execute("DELETE FROM Evento WHERE id_evento = ?", [id_evento]);
+    await conn.beginTransaction();
 
-    res.status(200).json({
-      mensagem: "O evento foi completamente OBLITERADO e excluído do sistema.",
-    });
+    await conn.execute("DELETE FROM EquipeEvento WHERE id_evento = ?", [id_evento]);
+    await conn.execute("DELETE FROM InscricaoEvento WHERE id_evento = ?", [id_evento]);
+
+    await conn.execute(
+      "DELETE rp FROM RegistroPresenca rp JOIN InscricaoAtividade ia ON rp.id_inscricaoAtividade = ia.id_inscricaoAtividade JOIN Atividade a ON ia.id_atividade = a.id_atividade WHERE a.id_evento = ?",
+      [id_evento]
+    );
+    await conn.execute(
+      "DELETE ia FROM InscricaoAtividade ia JOIN Atividade a ON ia.id_atividade = a.id_atividade WHERE a.id_evento = ?",
+      [id_evento]
+    );
+    await conn.execute("DELETE FROM Atividade WHERE id_evento = ?", [id_evento]);
+    
+    await conn.execute("DELETE FROM Evento WHERE id_evento = ?", [id_evento]);
+
+    await conn.commit();
+    res.status(200).json({ mensagem: "O evento foi completamente OBLITERADO e excluído do sistema." });
+    
   } catch (erro) {
-    console.error("Erro ao excluir evento:", erro);
+    await conn.rollback();
+    console.error("Erro transacional ao excluir evento:", erro);
     res.status(500).json({ erro: "Erro crítico ao tentar excluir o evento." });
+  } finally {
+    if (conn) conn.release();
   }
 });
 
