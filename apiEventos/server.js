@@ -32,9 +32,9 @@ const app = express();
 app.use(express.json());
 
 const origensPermitidas = [
-    'http://localhost:5173', // URL do seu Vite para quando você estiver programando no seu PC
-    'https://aki-xjvb.onrender.com/login', // SUBSTITUA AQUI: A URL real do seu React hospedado
-    'https://www.aki-xjvb.onrender.com/login' // Variação com www (se houver)
+    'http://localhost:5173', 
+    'https://aki-xjvb.onrender.com/login', 
+    'https://www.aki-xjvb.onrender.com/login' 
 ];
 
 const corsOptions = {
@@ -87,7 +87,7 @@ const verificarToken = (req, res, next) => {
   }
 
   try {
-    const dadosDecodificados = jwt.verify(token, process.env.JWT_SECRET);
+    const dadosDecodificados = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
     req.usuario = dadosDecodificados;
     next();
   } catch (erro) {
@@ -114,30 +114,43 @@ const verificarDonoOuAdmin = async (
   return Number(linhas[0].idOrganizador) === Number(id_usuario_logado);
 };
 
-app.get("/api/ingresso", verificarToken, (req, res) => {
-  try {
-    const id_usuario_logado = req.usuario.id;
+app.get('/api/ingresso', verificarToken, async (req, res) => {
     const { id_inscricaoAtividade } = req.query;
+    const id_usuario_logado = req.usuario.id;
 
     if (!id_inscricaoAtividade) {
-      return res.status(400).json({ erro: "ID da inscrição é obrigatório." });
+        return res.status(400).json({ erro: "ID da inscrição não fornecido." });
     }
 
-    const tokenQrCode = jwt.sign(
-      {
-        id_usuario: id_usuario_logado,
-        id_inscricaoAtividade: Number(id_inscricaoAtividade),
-        tipo: "qr_code_acesso",
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: "15s" },
-    );
+    try {
+        const [inscricoes] = await db.execute(
+            'SELECT id_usuario FROM InscricaoAtividade WHERE id_inscricaoAtividade = ?',
+            [id_inscricaoAtividade]
+        );
 
-    res.status(200).json({ tokenQrCode });
-  } catch (erro) {
-    console.error("Erro ao gerar ingresso:", erro);
-    res.status(500).json({ erro: "Erro ao gerar o ingresso digital." });
-  }
+        if (inscricoes.length === 0) {
+            return res.status(404).json({ erro: "Inscrição não encontrada." });
+        }
+
+        if (inscricoes[0].id_usuario !== id_usuario_logado) {
+            return res.status(403).json({ erro: "Acesso negado. Esta inscrição não pertence a você." });
+        }
+
+        const tokenQrCode = jwt.sign(
+            { 
+                id_inscricaoAtividade: id_inscricaoAtividade,
+                id_usuario: id_usuario_logado 
+            },
+            process.env.JWT_QR_SECRET, 
+            { expiresIn: '15s' } 
+        );
+
+        res.status(200).json({ tokenQrCode });
+
+    } catch (erro) {
+        console.error("[ERRO_BD] Falha ao gerar QR Code:", erro);
+        res.status(500).json({ erro: "Erro interno ao gerar o ingresso." });
+    }
 });
 
 app.get("/api/status", async (req, res) => {
@@ -312,14 +325,19 @@ app.post("/api/login", loginLimiter, async (req, res) => {
 
     const tokenSessao = jwt.sign(
         { id: usuario.id_usuario, perfil: usuario.tipoPerfil },
-        process.env.JWT_SECRET, 
+        process.env.JWT_ACCESS_SECRET, 
         { expiresIn: '15m' }    
     );
 
     const refreshToken = jwt.sign(
         { id: usuario.id_usuario }, 
-        process.env.JWT_SECRET, 
+        process.env.JWT_REFRESH_SECRET, 
         { expiresIn: '7d' }
+    );
+
+    await db.execute(
+    'UPDATE Usuario SET token_renovacao = ? WHERE id_usuario = ?', 
+    [refreshToken, usuario.id_usuario]
     );
 
     const [equipe] = await db.execute(
@@ -862,49 +880,49 @@ app.get("/api/meus-ingressos", verificarToken, async (req, res) => {
 
 app.post("/api/scanner/ler", verificarToken, async (req, res) => {
   const { token_lido } = req.body;
-  const idOrganizador = req.usuario.id;
+  const id_organizador = req.usuario.id;
   const perfil_organizador = req.usuario.perfil;
 
-  let id_inscricao;
+  let decodificado;
   try {
-    id_inscricao = jwt.verify(
-      token_lido,
-      process.env.JWT_SECRET,
-    ).id_inscricaoAtividade;
+    decodificado = jwt.verify(token_lido, process.env.JWT_QR_SECRET);
   } catch (erro) {
-    return res
-      .status(400)
-      .json({ status: "erro", mensagem: "QR Code inválido." });
+    if (erro.name === 'TokenExpiredError') {
+        return res.status(401).json({ status: "erro", mensagem: "QR Code expirado (passou de 30s). Peça ao aluno para atualizar a tela." });
+    }
+    return res.status(400).json({ status: "erro", mensagem: "QR Code inválido ou corrompido." });
   }
+
+  const id_inscricao = decodificado.id_inscricaoAtividade;
+  const id_usuario_qr = decodificado.id_usuario; 
 
   try {
     const queryToken = `
-            SELECT ia.id_inscricaoAtividade, u.nome AS nome_participante, u.ra AS ra_participante, 
+            SELECT ia.id_inscricaoAtividade, u.nome AS nome_participante, u.ra AS ra_participante, u.cpf AS cpf_participante,
                    u.fotoUrl, a.data, a.horarioInicio, a.horarioFim, e.id_usuario_gerente, e.id_evento
             FROM InscricaoAtividade ia
             JOIN Atividade a ON ia.id_atividade = a.id_atividade
             JOIN Evento e ON a.id_evento = e.id_evento
             JOIN Usuario u ON ia.id_usuario = u.id_usuario
-            WHERE ia.id_inscricaoAtividade = ?
+            WHERE ia.id_inscricaoAtividade = ? AND ia.id_usuario = ?
         `;
-    const [resultados] = await db.execute(queryToken, [id_inscricao]);
+    const [resultados] = await db.execute(queryToken, [id_inscricao, id_usuario_qr]);
 
     if (resultados.length === 0)
-      return res
-        .status(404)
-        .json({ status: "erro", mensagem: "Inscrição não encontrada." });
+      return res.status(404).json({ status: "erro", mensagem: "Ingresso inválido, falsificado ou não pertence a este aluno." });
+      
     const info = resultados[0];
 
     let autorizado = false;
 
     if (perfil_organizador === "ADMINISTRADOR") {
       autorizado = true;
-    } else if (Number(info.id_usuario_gerente) === Number(id_organizador)) {
+    } else if (Number(info.id_usuario_gerente) === Number(id_organizador)) { 
       autorizado = true;
     } else {
       const [staff] = await db.execute(
         "SELECT * FROM EquipeEvento WHERE id_evento = ? AND id_usuario = ?",
-        [info.id_evento, id_organizador],
+        [info.id_evento, id_organizador], 
       );
       if (staff.length > 0) autorizado = true;
     }
@@ -912,55 +930,46 @@ app.post("/api/scanner/ler", verificarToken, async (req, res) => {
     if (!autorizado) {
       return res.status(403).json({
         status: "erro",
-        mensagem: "Você não faz parte da organização deste evento.",
+        mensagem: "Você não faz parte da organização ou do Staff deste evento.",
       });
     }
 
     const TOLERANCIA = 15;
     const dataAtividadeStr = new Date(info.data).toISOString().split("T")[0];
     const inicioPermitido = new Date(
-      new Date(`${dataAtividadeStr}T${info.horarioInicio}-03:00`).getTime() -
-        TOLERANCIA * 60 * 1000,
+      new Date(`${dataAtividadeStr}T${info.horarioInicio}-03:00`).getTime() - TOLERANCIA * 60 * 1000,
     );
     const fimPermitido = new Date(
-      new Date(`${dataAtividadeStr}T${info.horarioFim}-03:00`).getTime() +
-        TOLERANCIA * 60 * 1000,
+      new Date(`${dataAtividadeStr}T${info.horarioFim}-03:00`).getTime() + TOLERANCIA * 60 * 1000,
     );
     const agora = new Date();
 
     if (agora < inicioPermitido)
-      return res
-        .status(400)
-        .json({ status: "erro", mensagem: "Check-in ainda não liberado." });
+      return res.status(400).json({ status: "erro", mensagem: "Check-in ainda não está liberado para esta atividade." });
     if (agora > fimPermitido)
-      return res
-        .status(400)
-        .json({ status: "erro", mensagem: "Prazo de check-in encerrado." });
+      return res.status(400).json({ status: "erro", mensagem: "O prazo para realizar o check-in nesta atividade já foi encerrado." });
 
     const [presencaExistente] = await db.execute(
       "SELECT id_registroPresenca FROM RegistroPresenca WHERE id_inscricaoAtividade = ?",
       [info.id_inscricaoAtividade],
     );
+    
     if (presencaExistente.length > 0)
-      return res
-        .status(400)
-        .json({ status: "erro", mensagem: "Este QR Code já foi validado!" });
+      return res.status(400).json({ status: "erro", mensagem: "Este ingresso já foi validado anteriormente!" });
 
     res.status(200).json({
       status: "pendente_confirmacao",
       id_inscricaoAtividade: info.id_inscricaoAtividade,
       participante: {
         nome: info.nome_participante,
-        documento: info.ra_participante || "N/A",
-        foto:
-          info.fotoUrl ||
-          "https://res.cloudinary.com/demo/image/upload/d_avatar.png/non_existing_id.png",
+        documento: info.ra_participante || info.cpf_participante || "Não informado",
+        foto: info.fotoUrl || "https://res.cloudinary.com/demo/image/upload/d_avatar.png/non_existing_id.png",
       },
     });
+    
   } catch (erro) {
-    res
-      .status(500)
-      .json({ status: "erro", mensagem: "Erro interno no servidor." });
+    console.error("[ERRO_BD] Falha ao processar leitura do QR:", erro);
+    res.status(500).json({ status: "erro", mensagem: "Erro interno no servidor ao validar QR Code." });
   }
 });
 
@@ -1416,9 +1425,8 @@ app.get(
 );
 
 // ==========================================
-// ROTA 2: CRIAR CHECKOUT PRO (Etiqueta Segura)
+// CRIAR CHECKOUT PRO 
 // ==========================================
-
 app.post('/api/pagamentos/checkout-pro', verificarToken, async (req, res) => {
     const { id_evento } = req.body;
     const id_usuario = req.usuario.id;
@@ -1455,7 +1463,6 @@ app.post('/api/pagamentos/checkout-pro', verificarToken, async (req, res) => {
         }
 
         if (numeroVagas && numeroVagas > 0) {
-            
             const [contagem] = await conn.execute(
                 'SELECT COUNT(*) as totalInscritos FROM InscricaoEvento WHERE id_evento = ?',
                 [id_evento]
@@ -1483,7 +1490,6 @@ app.post('/api/pagamentos/checkout-pro', verificarToken, async (req, res) => {
         }
         
         await conn.commit();
-        conn.release(); 
 
         const [usuarios] = await db.execute('SELECT nome, email FROM Usuario WHERE id_usuario = ?', [id_usuario]);
         const usuario = usuarios[0];
@@ -1518,21 +1524,20 @@ app.post('/api/pagamentos/checkout-pro', verificarToken, async (req, res) => {
         res.status(200).json({ status: 'pendente', link_pagamento: respostaMP.init_point });
 
     } catch (erro) {
-        
-        if (conn && !conn.connection._isCommitted) {
+        if (conn && !conn.connection._isCommitted && !conn.connection._isReleased) {
             await conn.rollback();
         }
         console.error("Erro ao gerar link de pagamento:", erro);
         res.status(500).json({ erro: "Erro interno ao gerar o pagamento." });
     } finally {
-        
-        if (conn && conn.connection) conn.release();
+        if (conn && conn.release) conn.release();
     }
 });
 
 // ==========================================
-// ROTA 3: WEBHOOK (Lendo a nova etiqueta)
+// ROTA 3: WEBHOOK 
 // ==========================================
+
 app.post("/api/pagamentos/webhook", async (req, res) => {
   const action = req.body.action || req.body.type;
   const paymentId = req.body?.data?.id || req.query.id;
@@ -1546,20 +1551,27 @@ app.post("/api/pagamentos/webhook", async (req, res) => {
       const statusOficial = await payment.get({ id: paymentId });
 
       if (statusOficial.status === "approved") {
-        const referencia = statusOficial.external_reference; // Ex: USUARIO_22_EVENTO_5
+        const referencia = statusOficial.external_reference; 
 
         if (referencia && referencia.startsWith("USUARIO_")) {
           const partes = referencia.split("_");
           const id_usuario = partes[1];
           const id_evento = partes[3];
 
-          const query =
-            "UPDATE InscricaoEvento SET status_pagamento = ?, id_transacao_mp = ? WHERE id_usuario = ? AND id_evento = ?";
-          await db.execute(query, ["PAGO", paymentId, id_usuario, id_evento]);
-
-          console.log(
-            `SUCESSO: Aluno ${id_usuario} pagou o Evento ${id_evento} via Cartão/MP! Vaga liberada.`,
+          const [inscricaoAtual] = await db.execute(
+              "SELECT status_pagamento FROM InscricaoEvento WHERE id_usuario = ? AND id_evento = ?",
+              [id_usuario, id_evento]
           );
+
+          if (inscricaoAtual.length > 0 && inscricaoAtual[0].status_pagamento !== "PAGO") {
+              const query = "UPDATE InscricaoEvento SET status_pagamento = ?, id_transacao_mp = ? WHERE id_usuario = ? AND id_evento = ?";
+              await db.execute(query, ["PAGO", paymentId, id_usuario, id_evento]);
+
+              console.log(`SUCESSO: Aluno ${id_usuario} pagou o Evento ${id_evento} via MP! Vaga liberada.`);
+              
+          } else {
+              console.log(`Webhook ignorado: O pagamento do aluno ${id_usuario} para o evento ${id_evento} já havia sido processado.`);
+          }
         }
       }
     }
@@ -1713,15 +1725,20 @@ app.post('/api/auth/google', loginLimiter, async (req, res) => {
 
             const tokenSessao = jwt.sign(
                 { id: usuario.id_usuario, perfil: usuario.tipoPerfil },
-                process.env.JWT_SECRET, 
+                process.env.JWT_ACCESS_SECRET, 
                 { expiresIn: '15m' }    
             );
 
             const refreshToken = jwt.sign(
                 { id: usuario.id_usuario }, 
-                process.env.JWT_SECRET, 
+                process.env.JWT_REFRESH_SECRET, 
                 { expiresIn: '7d' }
             );
+
+            await db.execute(
+              'UPDATE Usuario SET token_renovacao = ? WHERE id_usuario = ?', 
+              [refreshToken, usuario.id_usuario]
+          );
 
             const [equipe] = await db.execute('SELECT id_evento FROM EquipeEvento WHERE id_usuario = ? LIMIT 1', [usuario.id_usuario]);
             const isStaff = equipe.length > 0;
@@ -1771,41 +1788,58 @@ app.use((err, req, res, next) => {
 // ==========================================
 // ROTA DE REFRESH TOKEN
 // ==========================================
+
 app.post('/api/auth/refresh', async (req, res) => {
     const { refreshToken } = req.body;
 
-    if (!refreshToken) {
-        return res.status(401).json({ erro: "Refresh Token não fornecido." });
-    }
+    if (!refreshToken) return res.status(401).json({ erro: "Refresh Token não fornecido." });
 
-    try { 
-        // Verifica se o Refresh Token é matematicamente válido e não expirou (7 dias)
-        const dadosDecodificados = jwt.verify(refreshToken, process.env.JWT_SECRET);
-
-        //Vai no banco de dados garantir que o usuário ainda existe e pegar o perfil atualizado
-        const [usuarios] = await db.execute(
-            'SELECT id_usuario, tipoPerfil FROM Usuario WHERE id_usuario = ?', 
-            [dadosDecodificados.id]
-        );
-
-        if (usuarios.length === 0) {
-            return res.status(403).json({ erro: "Acesso revogado. Conta inativa ou excluída." });
+    try {
+        // 1. Verifica a assinatura matemática usando a chave ESPECÍFICA de refresh
+        const decodificado = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+        
+        // 2. Proteção extra: garante que é mesmo um token do tipo refresh
+        if (decodificado.typ !== 'refresh') {
+            return res.status(403).json({ erro: "Tipo de token inválido para esta operação." });
         }
 
-        const usuarioAtualizado = usuarios[0];
+        // 3. Validação no Banco de Dados (Revogação)
+        const [usuarios] = await db.execute(
+            'SELECT id_usuario, tipoPerfil, token_renovacao FROM Usuario WHERE id_usuario = ?', 
+            [decodificado.id]
+        );
 
-        // Gera um novo Access Token de 15 minutos com os dados fresquinhos do banco
+        const usuario = usuarios[0];
+
+        // Se o token fornecido for diferente do que está no banco, significa que é um token velho/roubado
+        if (!usuario || usuario.token_renovacao !== refreshToken) {
+            // Ação defensiva: Apaga todos os tokens deste usuário por suspeita de roubo
+            await db.execute('UPDATE Usuario SET token_renovacao = NULL WHERE id_usuario = ?', [decodificado.id]);
+            return res.status(403).json({ erro: "Violação de segurança. Sessão terminada." });
+        }
+
+        // 4. Rotação: Gera um NOVO Access Token e um NOVO Refresh Token
         const novoTokenSessao = jwt.sign(
-            { id: usuarioAtualizado.id_usuario, perfil: usuarioAtualizado.tipoPerfil },
-            process.env.JWT_SECRET,
+            { id: usuario.id_usuario, perfil: usuario.tipoPerfil, typ: 'access' },
+            process.env.JWT_ACCESS_SECRET,
             { expiresIn: '15m' }
         );
 
-        res.status(200).json({ token: novoTokenSessao });
+        const novoRefreshToken = jwt.sign(
+            { id: usuario.id_usuario, typ: 'refresh' },
+            process.env.JWT_REFRESH_SECRET,
+            { expiresIn: '7d' }
+        );
+
+        await db.execute(
+            'UPDATE Usuario SET token_renovacao = ? WHERE id_usuario = ?', 
+            [novoRefreshToken, usuario.id_usuario]
+        );
+
+        res.status(200).json({ token: novoTokenSessao, refreshToken: novoRefreshToken });
 
     } catch (erro) {
-        // Se o Refresh Token expirou ou foi fraudado, força o logout
-        res.status(403).json({ erro: "Sessão expirada. Faça login novamente." });
+        res.status(403).json({ erro: "Sessão expirada ou inválida. Faça login novamente." });
     }
 });
 
