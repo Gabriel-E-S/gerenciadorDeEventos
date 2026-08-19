@@ -18,6 +18,23 @@ const loginLimiter = rateLimit({
     legacyHeaders: false, 
 });
 
+const pagamentoLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, 
+    max: 10, 
+    message: { erro: "Muitas tentativas de geração de pagamento. Aguarde alguns minutos para tentar novamente." },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+
+const apiGeralLimiter = rateLimit({
+    windowMs: 5 * 60 * 1000, 
+    max: 300, 
+    message: { erro: "Muitas requisições ao servidor. Por favor, vá com calma." },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
 const db = require("./db");
 
 const multer = require("multer");
@@ -52,6 +69,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+app.use('/api/', apiGeralLimiter);
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -75,6 +93,37 @@ const upload = multer({
         }
     }
 });
+
+const validarMagicBytes = (req, res, next) => {
+    
+    if (!req.file) return next();
+
+    const buffer = req.file.buffer;
+    
+    // Pega os 4 primeiros bytes em formato hexadecimal
+    const magic = buffer.toString('hex', 0, 4).toUpperCase();
+    let isValid = false;
+
+    if (magic.startsWith('FFD8FF')) {
+        isValid = true; // É um JPG/JPEG autêntico
+    } else if (magic === '89504E47') {
+        isValid = true; // É um PNG autêntico
+    } else if (magic === '52494646') {
+        // Arquivos WebP começam com "RIFF" (52494646), e no byte 8 dizem "WEBP"
+        const identificadorWebp = buffer.toString('ascii', 8, 12);
+        if (identificadorWebp === 'WEBP') {
+            isValid = true; // É um WebP autêntico
+        }
+    }
+
+    if (!isValid) {
+        return res.status(403).json({ 
+            erro: "Arquivo malicioso ou formato camuflado detectado. Envie apenas imagens reais (JPG, PNG, WebP)." 
+        });
+    }
+
+    next();
+};
 
 const verificarToken = (req, res, next) => {
   const headerAuth = req.headers["authorization"];
@@ -139,7 +188,9 @@ app.get('/api/ingresso', verificarToken, async (req, res) => {
         const tokenQrCode = jwt.sign(
             { 
                 id_inscricaoAtividade: id_inscricaoAtividade,
-                id_usuario: id_usuario_logado 
+                id_usuario: id_usuario_logado,
+                typ: 'ingresso_qr', 
+                aud: 'scanner_evento'
             },
             process.env.JWT_QR_SECRET, 
             { expiresIn: '15s' } 
@@ -167,7 +218,7 @@ app.get("/api/status", async (req, res) => {
 });
 
 // Rota de cadastro.
-app.post("/api/cadastro", upload.single("fotoPerfil"),loginLimiter, async (req, res) => {
+app.post("/api/cadastro", upload.single("fotoPerfil"), validarMagicBytes, loginLimiter, async (req, res) => {
 
   const { nome, email, senha, cpf, ra, termos_aceitos, google_id } = req.body;
 
@@ -250,6 +301,7 @@ app.post(
   "/api/usuario/foto",
   verificarToken,
   upload.single("fotoPerfil"),
+  validarMagicBytes,
   async (req, res) => {
     try {
       const id_usuario = req.usuario.id;
@@ -370,6 +422,7 @@ app.post(
   "/api/eventos",
   verificarToken,
   upload.single("imagem"),
+  validarMagicBytes,
   async (req, res) => {
     console.log("➡️ DADOS RECEBIDOS (POST):", req.body);
 
@@ -546,6 +599,7 @@ app.put(
   "/api/eventos/:id",
   verificarToken,
   upload.single("imagem"),
+  validarMagicBytes,
   async (req, res) => {
     const {
       titulo,
@@ -885,10 +939,17 @@ app.post("/api/scanner/ler", verificarToken, async (req, res) => {
 
   let decodificado;
   try {
-    decodificado = jwt.verify(token_lido, process.env.JWT_QR_SECRET);
+      decodificado = jwt.verify(token_lido, process.env.JWT_QR_SECRET, {
+          audience: 'scanner_evento' 
+      });
+      
+      if (decodificado.typ !== 'ingresso_qr') {
+          throw new Error("Token fora do propósito");
+      }
+
   } catch (erro) {
     if (erro.name === 'TokenExpiredError') {
-        return res.status(401).json({ status: "erro", mensagem: "QR Code expirado (passou de 30s). Peça ao aluno para atualizar a tela." });
+        return res.status(401).json({ status: "erro", mensagem: "QR Code expirado (passou de 15s). Peça ao aluno para atualizar a tela." });
     }
     return res.status(400).json({ status: "erro", mensagem: "QR Code inválido ou corrompido." });
   }
@@ -1427,7 +1488,7 @@ app.get(
 // ==========================================
 // CRIAR CHECKOUT PRO 
 // ==========================================
-app.post('/api/pagamentos/checkout-pro', verificarToken, async (req, res) => {
+app.post('/api/pagamentos/checkout-pro', verificarToken, pagamentoLimiter, async (req, res) => {
     const { id_evento } = req.body;
     const id_usuario = req.usuario.id;
 
@@ -1605,7 +1666,7 @@ app.get("/api/usuario/perfil", verificarToken, async (req, res) => {
 });
 
 // Atualizar os dados e/ou a foto
-app.put('/api/usuario/perfil', verificarToken, upload.single('fotoPerfil'), async (req, res) => {
+app.put('/api/usuario/perfil', verificarToken, upload.single('fotoPerfil'), validarMagicBytes, async (req, res) => {
     
     const { nome, email, senhaAntiga, senhaNova } = req.body;
     const id_usuario = req.usuario.id;
@@ -1789,7 +1850,7 @@ app.use((err, req, res, next) => {
 // ROTA DE REFRESH TOKEN
 // ==========================================
 
-app.post('/api/auth/refresh', async (req, res) => {
+app.post('/api/auth/refresh', loginLimiter, async (req, res) => {
     const { refreshToken } = req.body;
 
     if (!refreshToken) return res.status(401).json({ erro: "Refresh Token não fornecido." });
