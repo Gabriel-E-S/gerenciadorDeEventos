@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
+import api from '../../services/api'; 
 import Loader from '../../components/UI/Loader';
 import './EditarPerfil.css';
 
 export default function EditarPerfil() {
   const navigate = useNavigate();
   const { usuarioLogado } = useContext(AuthContext);
-  const tokenSessao = localStorage.getItem('tokenSessao');
 
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
@@ -22,23 +22,21 @@ export default function EditarPerfil() {
   });
   const [novaFotoArquivo, setNovaFotoArquivo] = useState(null);
 
+
   useEffect(() => {
     const buscarPerfil = async () => {
       try {
-        const resposta = await fetch('https://gerenciadordeeventos.onrender.com/api/usuario/perfil', {
-          headers: { 'Authorization': `Bearer ${tokenSessao}` }
+        const resposta = await api.get('/api/usuario/perfil');
+        const dados = resposta.data;
+        
+        setPerfilData({
+          nome: dados.nome,
+          email: dados.email,
+          senhaAntiga: '',
+          senhaNova: '', 
+          fotoUrl: dados.fotoUrl
         });
         
-        if (resposta.ok) {
-          const dados = await resposta.json();
-          setPerfilData({
-            nome: dados.nome,
-            email: dados.email,
-            senhaAntiga: '',
-            senhaNova: '', 
-            fotoUrl: dados.fotoUrl
-          });
-        }
       } catch (erro) {
         console.error("Erro ao carregar perfil:", erro);
       } finally {
@@ -46,8 +44,8 @@ export default function EditarPerfil() {
       }
     };
 
-    if (tokenSessao) buscarPerfil();
-  }, [tokenSessao]);
+    buscarPerfil();
+  }, []); 
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -86,32 +84,26 @@ export default function EditarPerfil() {
     }
 
     try {
-      const resposta = await fetch('https://gerenciadordeeventos.onrender.com/api/usuario/perfil', {
-        method: 'PUT',
-        headers: { 'Authorization': `Bearer ${tokenSessao}` },
-        body: formData
-      });
+      const resposta = await api.put('/api/usuario/perfil', formData);
+      const dados = resposta.data;
 
-      const dados = await resposta.json();
-
-      if (resposta.ok) {
-        alert("Ok " + dados.mensagem);
+      alert("Ok " + dados.mensagem);
         
-        setPerfilData(prev => ({ 
-            ...prev, 
-            fotoUrl: dados.fotoUrl || prev.fotoUrl, 
-            senhaAntiga: '', 
-            senhaNova: '' 
-        }));
-        if (dados.fotoUrl) {
-            setFotoPreview(null);
-            setNovaFotoArquivo(null);
-        }
-      } else {
-        alert("Erro: " + dados.erro);
+      setPerfilData(prev => ({ 
+          ...prev, 
+          fotoUrl: dados.fotoUrl || prev.fotoUrl, 
+          senhaAntiga: '', 
+          senhaNova: '' 
+      }));
+      
+      if (dados.fotoUrl) {
+          setFotoPreview(null);
+          setNovaFotoArquivo(null);
       }
+      
     } catch (erro) {
-      alert("Erro de conexão ao atualizar perfil.");
+      const msgErro = erro.response?.data?.erro || "Erro de conexão ao atualizar perfil.";
+      alert("Erro: " + msgErro);
     } finally {
       setSalvando(false);
     }

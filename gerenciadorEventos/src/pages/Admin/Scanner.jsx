@@ -2,32 +2,27 @@ import React, { useEffect, useState, useRef, useContext } from "react";
 import { useNavigate } from "react-router-dom";
 import { Html5QrcodeScanner, Html5QrcodeScanType } from "html5-qrcode";
 import { AuthContext } from "../../context/AuthContext"; 
+import api from "../../services/api"; 
 import "./Scanner.css";
 
 export default function Scanner() {
   const navigate = useNavigate();
-
   const { usuarioLogado } = useContext(AuthContext);
 
   const [resultadoScan, setResultadoScan] = useState(null);
   const [participantePendente, setParticipantePendente] = useState(null);
-
   const scannerRef = useRef(null);
 
-  const tokenSessao = localStorage.getItem("tokenSessao");
-  const apiUrl =
-    import.meta.env.VITE_API_URL || "https://gerenciadordeeventos.onrender.com";
-
   useEffect(() => {
+    
+    const tokenSessao = localStorage.getItem("tokenSessao");
     if (!tokenSessao) {
       navigate("/login");
       return;
     }
 
     if (usuarioLogado?.perfil === "PARTICIPANTE" && !usuarioLogado?.isStaff) {
-      alert(
-        "Acesso restrito. Apenas organizadores ou equipe de apoio (Staff) podem acessar o Scanner.",
-      );
+      alert("Acesso restrito. Apenas organizadores ou equipe de apoio (Staff) podem acessar o Scanner.");
       navigate("/dashboard");
       return;
     }
@@ -38,52 +33,40 @@ export default function Scanner() {
       if (scannerRef.current) scannerRef.current.pause(true);
 
       try {
-        const resposta = await fetch(`${apiUrl}/api/scanner/ler`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${tokenSessao}`,
-          },
-          body: JSON.stringify({ token_lido: decodedText }),
-        });
+        const resposta = await api.post('/api/scanner/ler', { token_lido: decodedText });
+        const dados = resposta.data;
 
-        const dados = await resposta.json();
-
-        if (resposta.ok && dados.status === "pendente_confirmacao") {
+        if (dados.status === "pendente_confirmacao") {
           setParticipantePendente({
             id_inscricaoAtividade: dados.id_inscricaoAtividade,
             ...dados.participante,
           });
           setResultadoScan(null);
-        } else {
-          setResultadoScan({
-            status: "erro",
-            mensagem: dados.mensagem || dados.erro,
-            dados: { nome: "Acesso Negado", documento: "Verifique o QR Code" },
-          });
-
-          setTimeout(() => {
-            if (!isUnmounted) {
-              setResultadoScan(null);
-              if (scannerRef.current) scannerRef.current.resume();
-            }
-          }, 3000);
         }
+
       } catch (erro) {
-        console.error("Erro na requisição:", erro);
+        
+        const dadosErro = erro.response?.data || {};
+        
+        console.error("Erro na validação do ingresso:", erro);
+        
         setResultadoScan({
           status: "erro",
-          mensagem: "Falha de conexão com o servidor.",
-          dados: { nome: "-", documento: "-" },
+          mensagem: dadosErro.mensagem || dadosErro.erro || "Falha de conexão com o servidor.",
+          dados: { nome: "Acesso Negado", documento: "Verifique o QR Code" },
         });
+
         setTimeout(() => {
-          if (!isUnmounted && scannerRef.current) scannerRef.current.resume();
+          if (!isUnmounted) {
+            setResultadoScan(null);
+            if (scannerRef.current) scannerRef.current.resume();
+          }
         }, 3000);
       }
     }
 
     function onScanFailure(error) {
-      // Ignora falhas normais do ambiente
+      // Ignora falhas contínuas de leitura do ambiente
     }
 
     const initTimer = setTimeout(() => {
@@ -107,44 +90,32 @@ export default function Scanner() {
 
       if (scannerRef.current) {
         scannerRef.current.clear().catch((error) => {
-          console.error(
-            "Aviso: Falha ao limpar a câmera automaticamente.",
-            error,
-          );
+          console.error("Aviso: Falha ao limpar a câmera automaticamente.", error);
         });
       }
     };
-  }, [navigate, tokenSessao, apiUrl, usuarioLogado]);
+  }, [navigate, usuarioLogado]); 
 
   const handleConfirmarPresenca = async () => {
     try {
-      const resposta = await fetch(`${apiUrl}/api/scanner/confirmar`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${tokenSessao}`,
-        },
-        body: JSON.stringify({
-          id_inscricaoAtividade: participantePendente.id_inscricaoAtividade,
-        }),
+      const resposta = await api.post('/api/scanner/confirmar', {
+        id_inscricaoAtividade: participantePendente.id_inscricaoAtividade,
       });
 
-      const dados = await resposta.json();
+      // Sucesso!
+      setResultadoScan({
+        status: "sucesso",
+        mensagem: resposta.data.mensagem,
+        dados: {
+          nome: participantePendente.nome,
+          documento: participantePendente.documento,
+        },
+      });
 
-      if (resposta.ok) {
-        setResultadoScan({
-          status: "sucesso",
-          mensagem: dados.mensagem,
-          dados: {
-            nome: participantePendente.nome,
-            documento: participantePendente.documento,
-          },
-        });
-      } else {
-        alert("Erro: " + (dados.mensagem || dados.erro));
-      }
     } catch (erro) {
-      alert("Erro de rede ao confirmar presença.");
+      const msgErro = erro.response?.data?.mensagem || erro.response?.data?.erro || "Erro de rede ao confirmar presença.";
+      alert("Erro: " + msgErro);
+      
     } finally {
       setParticipantePendente(null);
       setTimeout(() => {
@@ -170,9 +141,7 @@ export default function Scanner() {
         <div id="reader"></div>
 
         {resultadoScan && !participantePendente && (
-          <div
-            className={`resultado-alerta ${resultadoScan.status === "erro" ? "erro-scan" : "sucesso-scan"}`}
-          >
+          <div className={`resultado-alerta ${resultadoScan.status === "erro" ? "erro-scan" : "sucesso-scan"}`}>
             <h2>
               {resultadoScan.status === "erro" ? "Erro:" : "Ok:"}{" "}
               {resultadoScan.mensagem}
@@ -205,16 +174,10 @@ export default function Scanner() {
             </div>
 
             <div className="modal-botoes">
-              <button
-                className="btn-confirmar-presenca"
-                onClick={handleConfirmarPresenca}
-              >
+              <button className="btn-confirmar-presenca" onClick={handleConfirmarPresenca}>
                 Sim, Confirmar Presença
               </button>
-              <button
-                className="btn-cancelar-presenca"
-                onClick={handleCancelar}
-              >
+              <button className="btn-cancelar-presenca" onClick={handleCancelar}>
                 Cancelar / Recusar
               </button>
             </div>

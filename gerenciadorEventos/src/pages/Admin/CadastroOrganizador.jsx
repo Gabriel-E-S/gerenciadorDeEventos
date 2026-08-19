@@ -1,23 +1,19 @@
 import React, { useState, useEffect } from 'react';
+import api from '../../services/api'; 
 import './NovoEvento.css';
 
 export default function CadastroOrganizador() {
-  const tokenSessao = localStorage.getItem('tokenSessao');
   
   const [formData, setFormData] = useState({ nome: '', email: '', senha: '', documento: '' });
-  
   const [listaUsuarios, setListaUsuarios] = useState([]);
   const [carregando, setCarregando] = useState(true);
 
   const carregarUsuarios = async () => {
     setCarregando(true);
     try {
-      const resposta = await fetch('https://gerenciadordeeventos.onrender.com/api/admin/usuarios', {
-        headers: { 'Authorization': `Bearer ${tokenSessao}` }
-      });
-      if (resposta.ok) {
-        setListaUsuarios(await resposta.json());
-      }
+    
+      const resposta = await api.get('/api/admin/usuarios');
+      setListaUsuarios(resposta.data); 
     } catch (erro) {
       console.error("Erro ao carregar usuários", erro);
     } finally {
@@ -32,24 +28,16 @@ export default function CadastroOrganizador() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const resposta = await fetch('https://gerenciadordeeventos.onrender.com/api/admin/usuarios', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${tokenSessao}`
-        },
-        body: JSON.stringify(formData)
-      });
-      const dados = await resposta.json();
-      if (resposta.ok) {
-        alert(dados.mensagem);
-        setFormData({ nome: '', email: '', senha: '', documento: '' });
-        carregarUsuarios(); 
-      } else {
-        alert("Erro: " + dados.erro);
-      }
+      
+      const resposta = await api.post('/api/admin/usuarios', formData);
+      
+      alert(resposta.data.mensagem);
+      setFormData({ nome: '', email: '', senha: '', documento: '' });
+      carregarUsuarios(); 
+      
     } catch (erro) {
-      alert("Erro ao cadastrar organizador.");
+      const mensagemErro = erro.response?.data?.erro || "Erro ao cadastrar organizador.";
+      alert("Erro: " + mensagemErro);
     }
   };
 
@@ -57,25 +45,15 @@ export default function CadastroOrganizador() {
     if (!window.confirm(`Tem certeza que deseja mudar este usuário para ${novoPerfil}?`)) return;
     
     try {
-      const resposta = await fetch(`${import.meta.env.VITE_API_URL || 'https://gerenciadordeeventos.onrender.com'}/api/admin/usuarios/${id_usuario}/perfil`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${tokenSessao}`
-        },
-        body: JSON.stringify({ novoPerfil })
-      });
+      const resposta = await api.put(`/api/admin/usuarios/${id_usuario}/perfil`, { novoPerfil });
       
-      const dados = await resposta.json();
-      if (resposta.ok) {
-        alert(dados.mensagem);
-        carregarUsuarios(); 
-      } else {
-        alert("Erro: " + dados.erro);
-        carregarUsuarios(); 
-      }
+      alert(resposta.data.mensagem);
+      carregarUsuarios(); 
+      
     } catch (erro) {
-      alert("Erro ao tentar atualizar o perfil.");
+      const mensagemErro = erro.response?.data?.erro || "Erro ao tentar atualizar o perfil.";
+      alert("Erro: " + mensagemErro);
+      carregarUsuarios();
     }
   };
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import { GoogleLogin } from '@react-oauth/google'; 
+import api from '../../services/api'; 
 import FormLogin from '../../components/Auth/FormLogin';
 import FormCadastro from '../../components/Auth/FormCadastro';
 import './Auth.css';
@@ -16,37 +17,34 @@ export default function Auth() {
   const [isCarregando, setIsCarregando] = useState(false);
   const [dadosIniciaisCadastro, setDadosIniciaisCadastro] = useState(null);
 
-  const apiUrl =  'https://gerenciadordeeventos.onrender.com';
-
   const handleGoogleSuccess = async (credentialResponse) => {
     setIsCarregando(true);
     setMensagemErro('');
     
     try {
-        const resposta = await fetch(`${apiUrl}/api/auth/google`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token_google: credentialResponse.credential })
-        });
-        
-        const dados = await resposta.json();
-        if (!resposta.ok) throw new Error(dados.erro || 'Erro na integração com Google');
+      const resposta = await api.post('/api/auth/google', { 
+        token_google: credentialResponse.credential 
+      });
+      
+      const dados = resposta.data;
 
-        if (dados.acao === 'login') {
-            login(dados.usuario, dados.token);
-            if (dados.usuario.perfil === 'ORGANIZADOR') navigate('/scanner');
-            else if (dados.usuario.perfil === 'ADMINISTRADOR') navigate('/eventos');
-            else navigate('/dashboard');
-            
-        } else if (dados.acao === 'completar_cadastro') {
-            setDadosIniciaisCadastro(dados.dados_sugeridos);
-            setIsLogin(false);
-            alert("Quase lá! Preencha os dados restantes e escolha sua foto para finalizar o cadastro.");
-        }
+      if (dados.acao === 'login') {
+        login(dados.usuario, dados.token, dados.refreshToken);
+        
+        if (dados.usuario.perfil === 'ORGANIZADOR') navigate('/scanner');
+        else if (dados.usuario.perfil === 'ADMINISTRADOR') navigate('/eventos');
+        else navigate('/dashboard');
+        
+      } else if (dados.acao === 'completar_cadastro') {
+        setDadosIniciaisCadastro(dados.dados_sugeridos);
+        setIsLogin(false);
+        alert("Quase lá! Preencha os dados restantes e escolha sua foto para finalizar o cadastro.");
+      }
     } catch (erro) {
-        setMensagemErro(erro.message);
+      const msgErro = erro.response?.data?.erro || erro.message || 'Erro na integração com Google';
+      setMensagemErro(msgErro);
     } finally {
-        setIsCarregando(false);
+      setIsCarregando(false);
     }
   };
 
@@ -61,15 +59,11 @@ export default function Auth() {
     setMensagemErro('');
     setIsCarregando(true);
     try {
-      const resposta = await fetch(`${apiUrl}/api/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify(dadosLogin)
-      });
-      const dados = await resposta.json();
-      if (!resposta.ok) throw new Error(dados.erro || 'Erro ao fazer login');
+      const resposta = await api.post('/api/login', dadosLogin);
+      const dados = resposta.data;
 
-      login(dados.usuario, dados.token); 
+      login(dados.usuario, dados.token, dados.refreshToken); 
+      
       alert('Login realizado com sucesso!');
       
       if (dados.usuario.perfil === 'ORGANIZADOR') navigate('/scanner');
@@ -77,7 +71,8 @@ export default function Auth() {
       else navigate('/dashboard');
 
     } catch (erro) {
-      setMensagemErro(erro.message);
+      const msgErro = erro.response?.data?.erro || erro.message || 'Erro ao fazer login';
+      setMensagemErro(msgErro);
     } finally {
       setIsCarregando(false);
     }
@@ -87,17 +82,13 @@ export default function Auth() {
     setMensagemErro('');
     setIsCarregando(true);
     try {
-      const resposta = await fetch(`${apiUrl}/api/cadastro`, {
-        method: 'POST',
-        body: formDataCadastro
-      });
-      const dados = await resposta.json();
-      if (!resposta.ok) throw new Error(dados.erro || 'Erro ao cadastrar');
-
+      await api.post('/api/cadastro', formDataCadastro);
+      
       alert('Conta criada! Faça login para continuar.');
       setIsLogin(true);
     } catch (erro) {
-      setMensagemErro(erro.message);
+      const msgErro = erro.response?.data?.erro || erro.message || 'Erro ao cadastrar';
+      setMensagemErro(msgErro);
     } finally {
       setIsCarregando(false);
     }

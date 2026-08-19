@@ -29,8 +29,29 @@ const client = new MercadoPagoConfig({
 const payment = new Payment(client);
 
 const app = express();
-app.use(cors());
 app.use(express.json());
+
+const origensPermitidas = [
+    'http://localhost:5173', // URL do seu Vite para quando você estiver programando no seu PC
+    'https://aki-xjvb.onrender.com/login', // SUBSTITUA AQUI: A URL real do seu React hospedado
+    'https://www.aki-xjvb.onrender.com/login' // Variação com www (se houver)
+];
+
+const corsOptions = {
+    origin: function (origin, callback) {
+        if (!origin || origensPermitidas.includes(origin)) {
+            callback(null, true);
+        } else {
+            
+            callback(new Error('Bloqueado pela política de CORS. Origem não autorizada.'));
+        }
+    },
+    methods: ['GET', 'POST', 'PUT', 'DELETE'], 
+    allowedHeaders: ['Content-Type', 'Authorization'],  
+    credentials: true
+};
+
+app.use(cors(corsOptions));
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -290,12 +311,15 @@ app.post("/api/login", loginLimiter, async (req, res) => {
     }
 
     const tokenSessao = jwt.sign(
-      {
-        id: usuario.id_usuario,
-        perfil: usuario.tipoPerfil,
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: "8h" },
+        { id: usuario.id_usuario, perfil: usuario.tipoPerfil },
+        process.env.JWT_SECRET, 
+        { expiresIn: '15m' }    
+    );
+
+    const refreshToken = jwt.sign(
+        { id: usuario.id_usuario }, 
+        process.env.JWT_SECRET, 
+        { expiresIn: '7d' }
     );
 
     const [equipe] = await db.execute(
@@ -307,6 +331,7 @@ app.post("/api/login", loginLimiter, async (req, res) => {
     res.status(200).json({
       mensagem: "Login realizado com sucesso!",
       token: tokenSessao,
+      refreshToken: refreshToken,
       usuario: {
         id: usuario.id_usuario,
         nome: usuario.nome,
@@ -1688,8 +1713,14 @@ app.post('/api/auth/google', loginLimiter, async (req, res) => {
 
             const tokenSessao = jwt.sign(
                 { id: usuario.id_usuario, perfil: usuario.tipoPerfil },
-                process.env.JWT_SECRET,
-                { expiresIn: '8h' }
+                process.env.JWT_SECRET, 
+                { expiresIn: '15m' }    
+            );
+
+            const refreshToken = jwt.sign(
+                { id: usuario.id_usuario }, 
+                process.env.JWT_SECRET, 
+                { expiresIn: '7d' }
             );
 
             const [equipe] = await db.execute('SELECT id_evento FROM EquipeEvento WHERE id_usuario = ? LIMIT 1', [usuario.id_usuario]);
@@ -1699,6 +1730,7 @@ app.post('/api/auth/google', loginLimiter, async (req, res) => {
                 acao: "login",
                 mensagem: "Login realizado com sucesso via Google!",
                 token: tokenSessao,
+                refreshToken: refreshToken,
                 usuario: {
                     id: usuario.id_usuario,
                     nome: usuario.nome,
@@ -1734,6 +1766,47 @@ app.use((err, req, res, next) => {
     }
     
     next(err);
+});
+
+// ==========================================
+// ROTA DE REFRESH TOKEN
+// ==========================================
+app.post('/api/auth/refresh', async (req, res) => {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+        return res.status(401).json({ erro: "Refresh Token não fornecido." });
+    }
+
+    try { 
+        // Verifica se o Refresh Token é matematicamente válido e não expirou (7 dias)
+        const dadosDecodificados = jwt.verify(refreshToken, process.env.JWT_SECRET);
+
+        //Vai no banco de dados garantir que o usuário ainda existe e pegar o perfil atualizado
+        const [usuarios] = await db.execute(
+            'SELECT id_usuario, tipoPerfil FROM Usuario WHERE id_usuario = ?', 
+            [dadosDecodificados.id]
+        );
+
+        if (usuarios.length === 0) {
+            return res.status(403).json({ erro: "Acesso revogado. Conta inativa ou excluída." });
+        }
+
+        const usuarioAtualizado = usuarios[0];
+
+        // Gera um novo Access Token de 15 minutos com os dados fresquinhos do banco
+        const novoTokenSessao = jwt.sign(
+            { id: usuarioAtualizado.id_usuario, perfil: usuarioAtualizado.tipoPerfil },
+            process.env.JWT_SECRET,
+            { expiresIn: '15m' }
+        );
+
+        res.status(200).json({ token: novoTokenSessao });
+
+    } catch (erro) {
+        // Se o Refresh Token expirou ou foi fraudado, força o logout
+        res.status(403).json({ erro: "Sessão expirada. Faça login novamente." });
+    }
 });
 
 

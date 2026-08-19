@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
+import api from '../../services/api'; 
 import CardAtividade from '../../components/Eventos/CardAtividade';
 import Loader from '../../components/UI/Loader';
 import './Eventos.css'; 
@@ -8,7 +9,7 @@ import './Eventos.css';
 export default function DetalhesEvento() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { usuarioLogado } = useContext(AuthContext);
+  const { usuarioLogado } = useContext(AuthContext); 
   
   const [evento, setEvento] = useState(null);
   const [atividades, setAtividades] = useState([]);
@@ -21,56 +22,37 @@ export default function DetalhesEvento() {
   useEffect(() => {
     const buscarDados = async () => {
       try {
-        const resEvento = await fetch(`https://gerenciadordeeventos.onrender.com/api/eventos/${id}`);
-        if (resEvento.ok) {
-          const dadosEvento = await resEvento.json();
-          setEvento(dadosEvento);
-        } else {
-          navigate('/eventos');
-          return;
-        }
+        const resEvento = await api.get(`/api/eventos/${id}`);
+        setEvento(resEvento.data);
 
-        const resAtividades = await fetch(`https://gerenciadordeeventos.onrender.com/api/eventos/${id}/atividades`);
-        if (resAtividades.ok) {
-          const dadosAtividades = await resAtividades.json();
-          setAtividades(dadosAtividades);
-        }
+        const resAtividades = await api.get(`/api/eventos/${id}/atividades`);
+        setAtividades(resAtividades.data);
 
-        const tokenSessao = localStorage.getItem('tokenSessao');
-        if (tokenSessao) {
-          
-          const resIngressos = await fetch('https://gerenciadordeeventos.onrender.com/api/meus-ingressos', {
-            headers: { 'Authorization': `Bearer ${tokenSessao}` }
-          });
-          if (resIngressos.ok) {
-            const dadosIngressos = await resIngressos.json();
-            const idsInscritos = dadosIngressos.map(ing => ing.id_atividade);
-            setInscricoesUsuario(idsInscritos);
-          }
+        if (usuarioLogado) {
+          const resIngressos = await api.get('/api/meus-ingressos');
+          const idsInscritos = resIngressos.data.map(ing => ing.id_atividade);
+          setInscricoesUsuario(idsInscritos);
 
-          const resStatus = await fetch(`https://gerenciadordeeventos.onrender.com/api/eventos/${id}/status-pagamento`, {
-            headers: { 'Authorization': `Bearer ${tokenSessao}` }
-          });
-          
-          if (resStatus.ok) {
-            const dadosStatus = await resStatus.json();
-            setStatusPagamento(dadosStatus.status);
-          }
+          const resStatus = await api.get(`/api/eventos/${id}/status-pagamento`);
+          setStatusPagamento(resStatus.data.status);
         }
 
       } catch (erro) {
-        console.error("Erro ao carregar detalhes:", erro);
+        if (erro.response?.status === 404) {
+          navigate('/eventos');
+        } else {
+          console.error("Erro ao carregar detalhes:", erro);
+        }
       } finally {
         setCarregando(false);
       }
     };
 
     buscarDados();
-  }, [id, navigate]);
+  }, [id, navigate, usuarioLogado]);
 
   const handleComprar = async () => {
-    const tokenSessao = localStorage.getItem('tokenSessao');
-    if (!tokenSessao) {
+    if (!usuarioLogado) {
       alert("Você precisa fazer login para garantir sua inscrição!");
       navigate('/login');
       return;
@@ -78,69 +60,44 @@ export default function DetalhesEvento() {
 
     setCarregandoCheckout(true);
     try {
-      const resposta = await fetch('https://gerenciadordeeventos.onrender.com/api/pagamentos/checkout-pro', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${tokenSessao}`
-        },
-        body: JSON.stringify({ id_evento: id })
-      });
+      const resposta = await api.post('/api/pagamentos/checkout-pro', { id_evento: id });
+      const dados = resposta.data;
 
-      const dados = await resposta.json();
-
-      if (resposta.ok) {
-        if (dados.status === 'gratis') {
-          alert("Ok " + dados.mensagem);
-          window.location.reload(); 
-        } else if (dados.link_pagamento) {
-          // Redireciona para o ambiente seguro do Mercado Pago
-          window.location.href = dados.link_pagamento;
-        }
-      } else {
-        alert("Erro: " + dados.erro);
+      if (dados.status === 'gratis') {
+        alert("Ok " + dados.mensagem);
+        window.location.reload(); 
+      } else if (dados.link_pagamento) {
+        window.location.href = dados.link_pagamento;
       }
+      
     } catch (erro) {
-      alert("Erro de conexão ao gerar o pagamento.");
+      const msgErro = erro.response?.data?.erro || "Erro de conexão ao gerar o pagamento.";
+      alert("Erro: " + msgErro);
     } finally {
       setCarregandoCheckout(false);
     }
   };
 
   const handleInscricao = async (id_atividade) => {
-    const tokenSessao = localStorage.getItem('tokenSessao');
-
-    if (!tokenSessao) {
+    if (!usuarioLogado) {
       alert("Você precisa fazer login para se inscrever!");
       navigate('/login');
       return;
     }
 
     try {
-      const resposta = await fetch('https://gerenciadordeeventos.onrender.com/api/inscricao', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${tokenSessao}`
-        },
-        body: JSON.stringify({ id_atividade })
-      });
-
-      const dados = await resposta.json();
-
-      if (resposta.ok) {
-        alert("Inscrição confirmada!");
-        navigate('/dashboard'); 
-      } else {
-        alert("Erro! " + dados.erro);
-      }
+      await api.post('/api/inscricao', { id_atividade });
+      
+      alert("Inscrição confirmada!");
+      navigate('/dashboard'); 
+      
     } catch (erro) {
-      alert("Erro ao processar sua inscrição. Tente novamente.");
+      const msgErro = erro.response?.data?.erro || "Erro ao processar sua inscrição. Tente novamente.";
+      alert("Erro! " + msgErro);
     }
   };
 
   if (carregando) return <Loader mensagem="Carregando programação do evento..." />;
-
   if (!evento) return null;
 
   const podeGerenciar = usuarioLogado && (

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import axios from 'axios'; 
 import './Contato.css';
 
 export default function Contato() {
@@ -11,19 +12,15 @@ export default function Contato() {
     const formData = new FormData(form);
     
     try {
-      const response = await fetch("https://formspree.io/f/maqzjpbv", {
-        method: "POST",
-        body: formData,
+      const response = await axios.post("https://formspree.io/f/maqzjpbv", formData, {
         headers: {
           'Accept': 'application/json'
         }
       });
       
-      if (response.ok) {
+      if (response.status === 200) {
         setStatus('SUCESSO');
         form.reset(); 
-      } else {
-        setStatus('ERRO');
       }
     } catch (error) {
       setStatus('ERRO');

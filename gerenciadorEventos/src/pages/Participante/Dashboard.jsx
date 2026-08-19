@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import api from '../../services/api'; 
 import Loader from '../../components/UI/Loader';
 import CardIngresso from '../../components/Participante/CardIngresso';
 import ModalIngresso from '../../components/Participante/ModalIngresso';
@@ -27,14 +28,9 @@ export default function Dashboard() {
 
     const buscarMeusIngressos = async () => {
       try {
-        const tokenSessao = localStorage.getItem('tokenSessao');
-        const res = await fetch('https://gerenciadordeeventos.onrender.com/api/meus-ingressos', {
-          headers: { 'Authorization': `Bearer ${tokenSessao}` }
-        });
-        if (res.ok) {
-          const dados = await res.json();
-          setIngressos(dados);
-        }
+        
+        const res = await api.get('/api/meus-ingressos');
+        setIngressos(res.data);
       } catch (erro) {
         console.error("Erro ao carregar agenda:", erro);
       } finally {
@@ -48,18 +44,13 @@ export default function Dashboard() {
   useEffect(() => {
     if (!ingressoSelecionado || ingressoSelecionado.checkinRealizado) return;
 
-    const tokenSessao = localStorage.getItem('tokenSessao');
-
     const obterNovoToken = async () => {
       try {
-        const res = await fetch(`https://gerenciadordeeventos.onrender.com/api/ingresso?id_inscricaoAtividade=${ingressoSelecionado.id_inscricaoAtividade}`, {
-          headers: { 'Authorization': `Bearer ${tokenSessao}` }
-        });
-        if (res.ok) {
-          const dados = await res.json();
-          setTokenQr(dados.tokenQrCode);
-          setTempoRestante(15); 
-        }
+        
+        const res = await api.get(`/api/ingresso?id_inscricaoAtividade=${ingressoSelecionado.id_inscricaoAtividade}`);
+        
+        setTokenQr(res.data.tokenQrCode);
+        setTempoRestante(15); 
       } catch (erro) {
         console.error("Erro ao obter token do QR Code:", erro);
       }
@@ -85,23 +76,17 @@ export default function Dashboard() {
     if (!confirmar) return;
 
     try {
-      const tokenSessao = localStorage.getItem('tokenSessao');
-      const res = await fetch(`https://gerenciadordeeventos.onrender.com/api/inscricao/${ingressoSelecionado.id_inscricaoAtividade}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${tokenSessao}` }
-      });
-      const dados = await res.json();
+      const res = await api.delete(`/api/inscricao/${ingressoSelecionado.id_inscricaoAtividade}`);
       
-      if (res.ok) {
-        alert("Ok " + dados.mensagem);
-        setIngressoSelecionado(null); 
-        const resLista = await fetch('https://gerenciadordeeventos.onrender.com/api/meus-ingressos', { headers: { 'Authorization': `Bearer ${tokenSessao}` }});
-        setIngressos(await resLista.json());
-      } else {
-        alert("Erro " + dados.erro);
-      }
+      alert("Ok " + res.data.mensagem);
+      setIngressoSelecionado(null); 
+      
+      const resLista = await api.get('/api/meus-ingressos');
+      setIngressos(resLista.data);
+      
     } catch (erro) {
-      alert("Erro ao tentar cancelar a inscrição.");
+      const msgErro = erro.response?.data?.erro || "Erro ao tentar cancelar a inscrição.";
+      alert("Erro: " + msgErro);
     }
   };
 

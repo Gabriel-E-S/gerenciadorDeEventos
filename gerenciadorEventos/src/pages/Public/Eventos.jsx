@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
+import api from '../../services/api'; 
 import CardEvento from '../../components/Eventos/CardEvento';
 import Loader from '../../components/UI/Loader';
 import './Eventos.css';
@@ -15,11 +16,8 @@ export default function Eventos() {
   useEffect(() => {
     const buscarEventos = async () => {
       try {
-        const resposta = await fetch('https://gerenciadordeeventos.onrender.com/api/eventos');
-        if (resposta.ok) {
-          const dados = await resposta.json();
-          setListaEventos(dados);
-        }
+        const resposta = await api.get('/api/eventos');
+        setListaEventos(resposta.data);
       } catch (erro) {
         console.error("Erro de conexão:", erro);
       } finally {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext'; 
+import api from '../../services/api'; 
 import Loader from '../../components/UI/Loader';
 import FormularioEvento from '../../components/Admin/FormularioEvento';
 import FormularioAtividade from '../../components/Admin/FormularioAtividade';
@@ -9,7 +10,6 @@ import './NovoEvento.css';
 export default function EditarEvento() {
   const { id } = useParams(); 
   const navigate = useNavigate();
-  const tokenSessao = localStorage.getItem('tokenSessao');
   
   const { usuarioLogado } = useContext(AuthContext);
 
@@ -48,41 +48,38 @@ export default function EditarEvento() {
 
   const carregarDados = async () => {
     try {
-      const resEvento = await fetch(`https://gerenciadordeeventos.onrender.com/api/eventos/${id}`);
-      if (resEvento.ok) {
-        const dados = await resEvento.json();
-        setEventoData({
-          titulo: dados.titulo,
-          descricao: dados.descricao || '',
-          dataInicio: formatarDataParaInput(dados.dataInicio),
-          dataFim: formatarDataParaInput(dados.dataFim),
-          local: dados.local || '',
-          numeroVagas: dados.numeroVagas || '',
-          idOrganizador: dados.id_usuario_gerente || '',
-          preco: dados.preco !== null && dados.preco !== undefined ? dados.preco : ''
-        });
-      } else {
-        alert("Evento não encontrado.");
-        navigate('/eventos');
-        return;
-      }
+      const resEvento = await api.get(`/api/eventos/${id}`);
+      const dados = resEvento.data;
+      
+      setEventoData({
+        titulo: dados.titulo,
+        descricao: dados.descricao || '',
+        dataInicio: formatarDataParaInput(dados.dataInicio),
+        dataFim: formatarDataParaInput(dados.dataFim),
+        local: dados.local || '',
+        numeroVagas: dados.numeroVagas || '',
+        idOrganizador: dados.id_usuario_gerente || '',
+        preco: dados.preco !== null && dados.preco !== undefined ? dados.preco : ''
+      });
 
       if (usuarioLogado?.perfil === 'ADMINISTRADOR') {
-        const resOrg = await fetch('https://gerenciadordeeventos.onrender.com/api/organizadores', {
-          headers: { 'Authorization': `Bearer ${tokenSessao}` }
-        });
-        if (resOrg.ok) {
-          setListaOrganizadores(await resOrg.json());
-        }
+        const resOrg = await api.get('/api/organizadores');
+        setListaOrganizadores(resOrg.data);
       }
-      const resAtividades = await fetch(`https://gerenciadordeeventos.onrender.com/api/eventos/${id}/atividades`);
-      if (resAtividades.ok) setListaAtividades(await resAtividades.json());
+      
+      const resAtividades = await api.get(`/api/eventos/${id}/atividades`);
+      setListaAtividades(resAtividades.data);
 
-      const resMetricas = await fetch(`https://gerenciadordeeventos.onrender.com/api/eventos/${id}/estatisticas`);
-      if (resMetricas.ok) setMetricas(await resMetricas.json());
+      const resMetricas = await api.get(`/api/eventos/${id}/estatisticas`);
+      setMetricas(resMetricas.data);
 
     } catch (erro) {
-      console.error("Erro ao buscar dados:", erro);
+      if (erro.response?.status === 404) {
+        alert("Evento não encontrado.");
+        navigate('/eventos');
+      } else {
+        console.error("Erro ao buscar dados:", erro);
+      }
     } finally {
       setCarregando(false);
     }
@@ -97,20 +94,11 @@ export default function EditarEvento() {
     if (!emailStaff) return; 
 
     try {
-        const res = await fetch(`https://gerenciadordeeventos.onrender.com/api/eventos/${id}/equipe`, {
-            method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${tokenSessao}` 
-            },
-            body: JSON.stringify({ email: emailStaff })
-        });
-        const data = await res.json();
-        if(res.ok) alert("ok " + data.mensagem);
-        else alert("erro " + data.erro);
-
+      const res = await api.post(`/api/eventos/${id}/equipe`, { email: emailStaff });
+      alert("Ok " + res.data.mensagem);
     } catch (err) {
-        alert("Erro de conexão ao adicionar Staff.");
+      const msgErro = err.response?.data?.erro || "Erro de conexão ao adicionar Staff.";
+      alert("Erro: " + msgErro);
     }
   };
 
@@ -130,117 +118,92 @@ export default function EditarEvento() {
         formData.append('imagem', imagemEvento);
       }
 
-      const resposta = await fetch(`https://gerenciadordeeventos.onrender.com/api/eventos/${id}`, {
-        method: 'PUT',
-        headers: { 
-          'Authorization': `Bearer ${tokenSessao}` 
-        },
-        body: formData
-      });
-      const dados = await resposta.json();
-      if (resposta.ok) alert("Ok " + dados.mensagem);
-      else alert("Erro: " + dados.erro);
+      const resposta = await api.put(`/api/eventos/${id}`, formData);
+      alert("Ok " + resposta.data.mensagem);
+      
     } catch (erro) {
-      alert("Erro ao salvar o evento principal.");
+      const msgErro = erro.response?.data?.erro || "Erro ao salvar o evento principal.";
+      alert("Erro: " + msgErro);
     }
   };
 
   const handleSalvarEdicaoAtividade = async (e) => {
     e.preventDefault();
     try {
-      const resposta = await fetch(`https://gerenciadordeeventos.onrender.com/api/atividades/${atividadeEditandoId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenSessao}` },
-        body: JSON.stringify({
-          titulo: atividadeData.tituloAtividade,
-          tipo: atividadeData.tipoAtividade,
-          data: atividadeData.dataAtividade,
-          horarioInicio: atividadeData.horaInicio,
-          horarioFim: atividadeData.horaFim,
-          capacidadeMaxima: atividadeData.capacidade
-        })
+      const resposta = await api.put(`/api/atividades/${atividadeEditandoId}`, {
+        titulo: atividadeData.tituloAtividade,
+        tipo: atividadeData.tipoAtividade,
+        data: atividadeData.dataAtividade,
+        horarioInicio: atividadeData.horaInicio,
+        horarioFim: atividadeData.horaFim,
+        capacidadeMaxima: atividadeData.capacidade
       });
       
-      const dados = await resposta.json();
-      if (resposta.ok) {
-        alert("Ok " + dados.mensagem);
-        setAtividadeEditandoId(null); 
-        carregarDados(); 
-      } else {
-        alert("Erro: " + dados.erro);
-      }
+      alert("Ok " + resposta.data.mensagem);
+      setAtividadeEditandoId(null); 
+      carregarDados(); 
+      
     } catch (erro) {
-      alert("Erro ao atualizar a atividade.");
+      const msgErro = erro.response?.data?.erro || "Erro ao atualizar a atividade.";
+      alert("Erro: " + msgErro);
     }
   };
 
   const handleCriarNovaAtividade = async (e) => {
     e.preventDefault();
     try {
-      const resposta = await fetch('https://gerenciadordeeventos.onrender.com/api/atividades', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenSessao}` },
-        body: JSON.stringify({
-          id_evento: id, 
-          titulo: novaAtividadeData.tituloAtividade,
-          tipo: novaAtividadeData.tipoAtividade,
-          data: novaAtividadeData.dataAtividade,
-          horarioInicio: novaAtividadeData.horaInicio,
-          horarioFim: novaAtividadeData.horaFim,
-          capacidadeMaxima: novaAtividadeData.capacidade
-        })
+      await api.post('/api/atividades', {
+        id_evento: id, 
+        titulo: novaAtividadeData.tituloAtividade,
+        tipo: novaAtividadeData.tipoAtividade,
+        data: novaAtividadeData.dataAtividade,
+        horarioInicio: novaAtividadeData.horaInicio,
+        horarioFim: novaAtividadeData.horaFim,
+        capacidadeMaxima: novaAtividadeData.capacidade
       });
 
-      const dados = await resposta.json();
-      if (resposta.ok) {
-        alert("Nova atividade adicionada com sucesso!");
-        setMostrandoFormNova(false); 
-        setNovaAtividadeData({ tituloAtividade: '', tipoAtividade: '', dataAtividade: '', horaInicio: '', horaFim: '', capacidade: '' }); 
-        carregarDados(); 
-      } else {
-        alert("Erro: " + dados.erro);
-      }
+      alert("Nova atividade adicionada com sucesso!");
+      setMostrandoFormNova(false); 
+      setNovaAtividadeData({ tituloAtividade: '', tipoAtividade: '', dataAtividade: '', horaInicio: '', horaFim: '', capacidade: '' }); 
+      carregarDados(); 
+      
     } catch (erro) {
-      alert("Erro de conexão ao criar atividade.");
+      const msgErro = erro.response?.data?.erro || "Erro de conexão ao criar atividade.";
+      alert("Erro: " + msgErro);
     }
   };
 
   const handleExcluirAtividade = async (id_atividade) => {
     if (!window.confirm("ATENÇÃO: Isso excluirá esta atividade e as inscrições de todos os alunos. Continuar?")) return;
     try {
-      const resposta = await fetch(`https://gerenciadordeeventos.onrender.com/api/atividades/${id_atividade}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${tokenSessao}` }
-      });
-      if (resposta.ok) {
-        alert("Atividade removida.");
-        carregarDados(); 
-      }
-    } catch (erro) { alert("Erro ao excluir."); }
+      await api.delete(`/api/atividades/${id_atividade}`);
+      alert("Atividade removida.");
+      carregarDados(); 
+    } catch (erro) { 
+      alert("Erro ao excluir atividade."); 
+    }
   };
 
   const handleExcluirEvento = async () => {
     if (!window.confirm("ALERTA: Você está prestes a excluir o EVENTO INTEIRO e todos os dados vinculados a ele. Esta ação é IRREVERSÍVEL. Confirmar?")) return;
     try {
-      const resposta = await fetch(`https://gerenciadordeeventos.onrender.com/api/eventos/${id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${tokenSessao}` }
-      });
-      if (resposta.ok) {
-        alert("Evento excluído com sucesso.");
-        navigate('/eventos'); 
-      }
-    } catch (erro) { alert("Erro ao excluir o evento."); }
+      await api.delete(`/api/eventos/${id}`);
+      alert("Evento excluído com sucesso.");
+      navigate('/eventos'); 
+    } catch (erro) { 
+      alert("Erro ao excluir o evento."); 
+    }
   };
 
   const handleExportarRelatorio = async () => {
     try {
-      const resposta = await fetch(`https://gerenciadordeeventos.onrender.com/api/eventos/${id}/relatorio`, {
-        headers: { 'Authorization': `Bearer ${tokenSessao}` }
-      });
-      const dados = await resposta.json();
-      if (!resposta.ok) { alert("Erro: " + dados.erro); return; }
-      if (dados.length === 0) { alert("Não há nenhuma inscrição registrada neste evento ainda."); return; }
+      const resposta = await api.get(`/api/eventos/${id}/relatorio`);
+      const dados = resposta.data;
+      
+      if (dados.length === 0) { 
+        alert("Não há nenhuma inscrição registrada neste evento ainda."); 
+        return; 
+      }
 
       const cabecalhos = Object.keys(dados[0]).join(';');
       const linhas = dados.map(linha => Object.values(linha).map(valor => `"${String(valor).replace(/"/g, '""').replace(/\n/g, ' ')}"`).join(';'));
@@ -254,7 +217,11 @@ export default function EditarEvento() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-    } catch (erro) { alert("Erro ao tentar baixar o relatório."); }
+      
+    } catch (erro) { 
+      const msgErro = erro.response?.data?.erro || "Erro ao tentar baixar o relatório.";
+      alert("Erro: " + msgErro); 
+    }
   };
 
   const isDonoOuAdmin = usuarioLogado?.perfil === 'ADMINISTRADOR' || Number(usuarioLogado?.id) === Number(eventoData?.idOrganizador);
@@ -337,7 +304,6 @@ export default function EditarEvento() {
                     <div className="atividade-resumo">
                       <div>
                         <strong>{ativ.titulo}</strong>
-                        {/* Exibindo o Tipo abaixo do Título */}
                         <p style={{ color: 'var(--primary-blue)', fontWeight: 'bold', fontSize: '0.8rem', marginTop: '2px' }}>
                           {ativ.tipo || 'Geral'}
                         </p>
