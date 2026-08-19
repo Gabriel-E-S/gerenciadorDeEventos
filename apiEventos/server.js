@@ -3,6 +3,7 @@ const cors = require("cors");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const rateLimit = require('express-rate-limit');
+const { z } = require('zod'); 
 
 const { MercadoPagoConfig, Payment, Preference } = require("mercadopago");
 const { OAuth2Client } = require('google-auth-library');
@@ -34,6 +35,8 @@ const apiGeralLimiter = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
 });
+
+
 
 const db = require("./db");
 
@@ -92,6 +95,88 @@ const upload = multer({
             cb(new Error('FORMATO_INVALIDO')); 
         }
     }
+});
+
+const validarDados = (schema) => (req, res, next) => {
+    try {
+        // Verifica se os dados que chegaram batem com a regra definida
+        schema.parse({
+            body: req.body,
+            query: req.query,
+            params: req.params,
+        });
+        next(); // Tudo certo, pode seguir!
+    } catch (err) {
+        // Mapeia os erros de forma legível para devolver ao Frontend
+        const errosFormatados = err.errors.map(e => e.message).join(', ');
+        return res.status(400).json({ 
+            erro: "Dados inválidos: " + errosFormatados 
+        });
+    }
+};
+
+const schemaLogin = z.object({
+    body: z.object({
+        email: z.string().email("Formato de e-mail inválido."),
+        senha: z.string().min(1, "A senha é obrigatória.")
+    })
+});
+
+const schemaCadastro = z.object({
+    body: z.object({
+        nome: z.string().min(3, "O nome deve ter pelo menos 3 caracteres."),
+        email: z.string().email("Formato de e-mail inválido."),
+        senha: z.string().min(6, "A senha deve ter pelo menos 6 caracteres."),
+        cpf: z.string().regex(/^\d{11}$/, "O CPF deve conter exatamente 11 números, sem pontos ou traços."),
+        termos_aceitos: z.literal("true", { errorMap: () => ({ message: "Você precisa aceitar os termos de uso." }) }),
+        ra: z.string().optional().nullable(),
+        google_id: z.string().optional().nullable()
+    })
+});
+
+const schemaNovoEvento = z.object({
+    body: z.object({
+        titulo: z.string().min(5, "O título precisa ter pelo menos 5 caracteres."),
+        dataInicio: z.string().min(1, "Data de início é obrigatória."),
+        dataFim: z.string().min(1, "Data de fim é obrigatória."),
+        idOrganizador: z.string().min(1, "Organizador é obrigatório."),
+        descricao: z.string().optional().nullable(),
+        local: z.string().optional().nullable(),
+        numeroVagas: z.string().optional().nullable(),
+        preco: z.string().optional().nullable()
+    })
+});
+
+const schemaNovoOrganizador = z.object({
+    body: z.object({
+        nome: z.string().min(3, "O nome é muito curto."),
+        email: z.string().email("Formato de e-mail inválido."),
+        senha: z.string().min(6, "A senha deve ter pelo menos 6 caracteres."),
+        documento: z.string().optional().nullable()
+    })
+});
+
+const schemaNovaAtividade = z.object({
+    body: z.object({
+        id_evento: z.union([z.string(), z.number()], { required_error: "ID do evento é obrigatório." }),
+        titulo: z.string().min(3, "O título da atividade precisa ter pelo menos 3 caracteres."),
+        tipo: z.string().min(1, "O tipo da atividade é obrigatório."),
+        data: z.string().min(10, "Data inválida."),
+        horarioInicio: z.string().min(5, "Horário de início inválido."),
+        horarioFim: z.string().min(5, "Horário de fim inválido."),
+        capacidadeMaxima: z.union([z.string(), z.number()]).optional().nullable()
+    })
+});
+
+const schemaEditarAtividade = z.object({
+    body: z.object({
+        titulo: z.string().min(3, "O título da atividade precisa ter pelo menos 3 caracteres."),
+        tipo: z.string().min(1, "O tipo da atividade é obrigatório."),
+        data: z.string().min(10, "Data inválida."),
+        horarioInicio: z.string().min(5, "Horário de início inválido."),
+        horarioFim: z.string().min(5, "Horário de fim inválido."),
+        capacidadeMaxima: z.union([z.string(), z.number()]).optional().nullable()
+    })
 });
 
 const validarMagicBytes = (req, res, next) => {
@@ -218,21 +303,8 @@ app.get("/api/status", async (req, res) => {
 });
 
 // Rota de cadastro.
-app.post("/api/cadastro", upload.single("fotoPerfil"), validarMagicBytes, loginLimiter, async (req, res) => {
-
+app.post("/api/cadastro", upload.single("fotoPerfil"), validarMagicBytes, loginLimiter, validarDados(schemaCadastro), async (req, res) => {
   const { nome, email, senha, cpf, ra, termos_aceitos, google_id } = req.body;
-
-  if (termos_aceitos !== "true") {
-    return res.status(400).json({
-      erro: "Você precisa aceitar os termos de uso para se cadastrar.",
-    });
-  }
-
-  if (!nome || !email || !senha || !cpf) {
-    return res
-      .status(400)
-      .json({ erro: "Nome, email, senha e CPF são obrigatórios." });
-  }
 
   try {
     const [usuariosExistentes] = await db.execute(
@@ -245,11 +317,7 @@ app.post("/api/cadastro", upload.single("fotoPerfil"), validarMagicBytes, loginL
     }
 
     const senhaHash = await bcrypt.hash(senha, 10);
-
-    const cpfLimpo = cpf.replace(/\D/g, "");
-    if (cpfLimpo.length !== 11) {
-      return res.status(400).json({ erro: "O CPF informado é inválido." });
-    }
+    const cpfLimpo = cpf.replace(/\D/g, ""); 
 
     let fotoUrl = null;
 
@@ -276,7 +344,6 @@ app.post("/api/cadastro", upload.single("fotoPerfil"), validarMagicBytes, loginL
         `;
 
     const aceitou = termos_aceitos === "true" ? 1 : 0;
-    
     
     await db.execute(query, [
       nome,
@@ -351,12 +418,8 @@ app.post(
   },
 );
 
-app.post("/api/login", loginLimiter, async (req, res) => {
+app.post("/api/login", loginLimiter, validarDados(schemaLogin), async (req, res) => {
   const { email, senha } = req.body;
-
-  if (!email || !senha) {
-    return res.status(400).json({ erro: "Email e senha são obrigatórios." });
-  }
 
   try {
     const [usuarios] = await db.execute(
@@ -376,13 +439,13 @@ app.post("/api/login", loginLimiter, async (req, res) => {
     }
 
     const tokenSessao = jwt.sign(
-        { id: usuario.id_usuario, perfil: usuario.tipoPerfil },
+        { id: usuario.id_usuario, perfil: usuario.tipoPerfil, typ: 'access' },
         process.env.JWT_ACCESS_SECRET, 
         { expiresIn: '15m' }    
     );
 
     const refreshToken = jwt.sign(
-        { id: usuario.id_usuario }, 
+        { id: usuario.id_usuario, typ: 'refresh' }, 
         process.env.JWT_REFRESH_SECRET, 
         { expiresIn: '7d' }
     );
@@ -423,19 +486,9 @@ app.post(
   verificarToken,
   upload.single("imagem"),
   validarMagicBytes,
+  validarDados(schemaNovoEvento), 
   async (req, res) => {
-    console.log("➡️ DADOS RECEBIDOS (POST):", req.body);
-
-    const {
-      titulo,
-      descricao,
-      dataInicio,
-      dataFim,
-      local,
-      numeroVagas,
-      idOrganizador,
-      preco,
-    } = req.body;
+    const { titulo, descricao, dataInicio, dataFim, local, numeroVagas, idOrganizador, preco } = req.body;
     const perfil = req.usuario.perfil;
 
     if (perfil !== "ADMINISTRADOR") {
@@ -444,23 +497,13 @@ app.post(
       });
     }
 
-    if (!titulo || !dataInicio || !dataFim || !idOrganizador) {
-      return res
-        .status(400)
-        .json({ erro: "Título, datas e Organizador são obrigatórios." });
-    }
-
     try {
       let url_imagem = null;
 
       if (req.file) {
         url_imagem = await new Promise((resolve, reject) => {
           const uploadStream = cloudinary.uploader.upload_stream(
-            {
-              folder: "capas_eventos",
-              format: "jpg",
-              transformation: [{ width: 800, height: 450, crop: "fill" }],
-            },
+            { folder: "capas_eventos", format: "jpg", transformation: [{ width: 800, height: 450, crop: "fill" }] },
             (error, result) => {
               if (error) reject(error);
               else resolve(result.secure_url);
@@ -491,9 +534,7 @@ app.post(
         id_evento: result.insertId,
       });
     } catch (erro) {
-
         console.error("[ERRO_BD] Falha ao salvar evento:", erro);
-        
         const msgErro = erro.sqlMessage || erro.message || "";
         
         if (msgErro.includes('chk_evento_datas')) {
@@ -503,10 +544,11 @@ app.post(
             return res.status(400).json({ erro: "O número de vagas deve ser maior que zero." });
         }
 
-        res.status(500).json({ erro: "Erro interno do servidor. A equipe técnica já foi notificada." });;
+        res.status(500).json({ erro: "Erro interno do servidor. A equipe técnica já foi notificada." });
     }
   },
 );
+
 app.get("/api/organizadores", verificarToken, async (req, res) => {
   if (req.usuario.perfil !== "ADMINISTRADOR")
     return res.status(403).json({ erro: "Acesso negado." });
@@ -715,16 +757,12 @@ app.put(
   },
 );
 
-app.post('/api/atividades', verificarToken, async (req, res) => {
+app.post('/api/atividades', verificarToken, validarDados(schemaNovaAtividade), async (req, res) => {
     const { id_evento, titulo, tipo, data, horarioInicio, horarioFim, capacidadeMaxima } = req.body;
 
     const autorizado = await verificarDonoOuAdmin(req.usuario.id, req.usuario.perfil, id_evento);
     if (!autorizado) {
         return res.status(403).json({ erro: "Acesso negado. Você não é o administrador deste evento." });
-    }
-
-    if (!id_evento || !titulo || !tipo || !data || !horarioInicio || !horarioFim) {
-        return res.status(400).json({ erro: "Todos os campos da atividade são obrigatórios." });
     }
 
     try {
@@ -770,7 +808,7 @@ app.get("/api/eventos/:id/atividades", async (req, res) => {
   }
 });
 
-app.put('/api/atividades/:id', verificarToken, async (req, res) => {
+app.put('/api/atividades/:id', verificarToken, validarDados(schemaEditarAtividade), async (req, res) => {
     const { titulo, tipo, data, horarioInicio, horarioFim, capacidadeMaxima } = req.body;
     const { id } = req.params;
 
@@ -1293,7 +1331,7 @@ app.get("/api/eventos/:id/relatorio", verificarToken, async (req, res) => {
   }
 });
 
-app.post("/api/admin/organizadores", verificarToken, async (req, res) => {
+app.post("/api/admin/organizadores", verificarToken, validarDados(schemaNovoOrganizador), async (req, res) => {
   if (req.usuario.perfil !== "ADMINISTRADOR") {
     return res.status(403).json({
       erro: "Acesso negado. Apenas administradores podem cadastrar organizadores.",
@@ -1301,12 +1339,6 @@ app.post("/api/admin/organizadores", verificarToken, async (req, res) => {
   }
 
   const { nome, email, senha, documento } = req.body;
-
-  if (!nome || !email || !senha) {
-    return res
-      .status(400)
-      .json({ erro: "Nome, email e senha são obrigatórios." });
-  }
 
   try {
     const [usuariosExistentes] = await db.execute(
@@ -1337,9 +1369,7 @@ app.post("/api/admin/organizadores", verificarToken, async (req, res) => {
         `;
 
     await db.execute(query, [nome, email, senhaHash, cpf, ra]);
-    res
-      .status(201)
-      .json({ mensagem: "Novo organizador cadastrado com sucesso!" });
+    res.status(201).json({ mensagem: "Novo organizador cadastrado com sucesso!" });
   } catch (erro) {
     console.error("Erro ao cadastrar organizador:", erro);
     res.status(500).json({ erro: "Erro interno no servidor." });
