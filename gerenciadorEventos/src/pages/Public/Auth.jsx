@@ -21,9 +21,11 @@ export default function Auth() {
     setIsCarregando(true);
     setMensagemErro('');
     
+    const tokenGoogleOriginal = credentialResponse.credential;
+
     try {
       const resposta = await api.post('/api/auth/google', { 
-        token_google: credentialResponse.credential 
+        token_google: tokenGoogleOriginal 
       });
       
       const dados = resposta.data;
@@ -36,7 +38,10 @@ export default function Auth() {
         else navigate('/dashboard');
         
       } else if (dados.acao === 'completar_cadastro') {
-        setDadosIniciaisCadastro(dados.dados_sugeridos);
+        setDadosIniciaisCadastro({
+            ...dados.dados_sugeridos,
+            token_google: tokenGoogleOriginal
+        });
         setIsLogin(false);
         alert("Quase lá! Preencha os dados restantes e escolha sua foto para finalizar o cadastro.");
       }
