@@ -987,11 +987,10 @@ app.post('/api/inscricao', verificarToken, validarDados(schemaInscricao), async 
     const conn = await db.getConnection();
 
     try {
-
         await conn.beginTransaction();
 
         const [atividadeRes] = await conn.execute(
-            'SELECT id_evento, capacidadeMaxima, data, horarioFim FROM Atividade WHERE id_atividade = ? FOR UPDATE', 
+            'SELECT id_evento, capacidadeMaxima, data, horarioFim FROM Atividade WHERE id_atividade = ?', 
             [id_atividade]
         );
         
@@ -1036,31 +1035,34 @@ app.post('/api/inscricao', verificarToken, validarDados(schemaInscricao), async 
         }
 
         if (capacidadeMaxima && capacidadeMaxima > 0) {
-            const [contagemRes] = await conn.execute(
-                'SELECT COUNT(*) as totalInscritos FROM InscricaoAtividade WHERE id_atividade = ?', 
-                [id_atividade]
-            );
-            if (contagemRes[0].totalInscritos >= capacidadeMaxima) {
+            const queryInscricao = `
+                INSERT INTO InscricaoAtividade (id_usuario, id_atividade)
+                SELECT ?, ? FROM DUAL
+                WHERE (
+                    SELECT COUNT(*) FROM (SELECT 1 FROM InscricaoAtividade WHERE id_atividade = ?) AS temp
+                ) < ?
+            `;
+            const [resultado] = await conn.execute(queryInscricao, [id_usuario, id_atividade, id_atividade, capacidadeMaxima]);
+            
+            if (resultado.affectedRows === 0) {
                 await conn.rollback();
                 return res.status(403).json({ erro: "Lotação esgotada! Não há mais vagas para esta atividade." });
             }
+        } else {
+            await conn.execute('INSERT INTO InscricaoAtividade (id_usuario, id_atividade) VALUES (?, ?)', [id_usuario, id_atividade]);
         }
         
-        await conn.execute('INSERT INTO InscricaoAtividade (id_usuario, id_atividade) VALUES (?, ?)', [id_usuario, id_atividade]);
-
-        
         await conn.commit();
-
         res.status(201).json({ mensagem: "Inscrição realizada com sucesso! O QR Code já está no seu Dashboard." });
 
     } catch (erro) {
-        
-        await conn.rollback();
+        if (conn && !conn.connection._isCommitted && !conn.connection._isReleased) {
+            await conn.rollback();
+        }
         console.error("Erro ao processar inscrição:", erro);
         res.status(500).json({ erro: "Erro interno ao processar a inscrição." });
     } finally {
-        
-        if (conn) conn.release();
+        if (conn && conn.release) conn.release();
     }
 });
 
@@ -1668,8 +1670,9 @@ app.post('/api/pagamentos/checkout-pro', verificarToken, pagamentoLimiter, valid
     try {
         await conn.beginTransaction();
 
+        // 1. FOR UPDATE removido
         const [eventos] = await conn.execute(
-            'SELECT titulo, preco, numeroVagas FROM Evento WHERE id_evento = ? FOR UPDATE', 
+            'SELECT titulo, preco, numeroVagas FROM Evento WHERE id_evento = ?', 
             [id_evento]
         );
         
@@ -1692,21 +1695,19 @@ app.post('/api/pagamentos/checkout-pro', verificarToken, pagamentoLimiter, valid
             return res.status(400).json({ erro: "Você já está inscrito neste evento!" });
         }
 
-        if (numeroVagas && numeroVagas > 0) {
-            const [contagem] = await conn.execute(
-                'SELECT COUNT(*) as totalInscritos FROM InscricaoEvento WHERE id_evento = ?',
-                [id_evento]
-            );
-            
-            if (contagem[0].totalInscritos >= numeroVagas) {
-                await conn.rollback();
-                return res.status(403).json({ erro: "Lotação esgotada! Os ingressos para este evento acabaram." });
-            }
-        }
-
         if (preco === 0) {
             if (inscricaoExiste.length === 0) {
-                await conn.execute('INSERT INTO InscricaoEvento (id_usuario, id_evento, valor_pago, status_pagamento) VALUES (?, ?, ?, ?)', [id_usuario, id_evento, 0.00, 'PAGO']);
+                const queryGratis = `
+                    INSERT INTO InscricaoEvento (id_usuario, id_evento, valor_pago, status_pagamento)
+                    SELECT ?, ?, 0.00, 'PAGO' FROM DUAL
+                    WHERE (? IS NULL OR ? = 0 OR (SELECT COUNT(*) FROM (SELECT 1 FROM InscricaoEvento WHERE id_evento = ?) AS temp) < ?)
+                `;
+                const [resultado] = await conn.execute(queryGratis, [id_usuario, id_evento, numeroVagas, numeroVagas, id_evento, numeroVagas]);
+                
+                if (numeroVagas > 0 && resultado.affectedRows === 0) {
+                    await conn.rollback();
+                    return res.status(403).json({ erro: "Lotação esgotada! Os ingressos para este evento acabaram." });
+                }
             } else {
                 await conn.execute('UPDATE InscricaoEvento SET status_pagamento = ? WHERE id_usuario = ? AND id_evento = ?', ['PAGO', id_usuario, id_evento]);
             }
@@ -1716,7 +1717,17 @@ app.post('/api/pagamentos/checkout-pro', verificarToken, pagamentoLimiter, valid
         }
 
         if (inscricaoExiste.length === 0) {
-            await conn.execute('INSERT INTO InscricaoEvento (id_usuario, id_evento, valor_pago, status_pagamento) VALUES (?, ?, ?, ?)', [id_usuario, id_evento, preco, 'PENDENTE']);
+            const queryPago = `
+                INSERT INTO InscricaoEvento (id_usuario, id_evento, valor_pago, status_pagamento)
+                SELECT ?, ?, ?, 'PENDENTE' FROM DUAL
+                WHERE (? IS NULL OR ? = 0 OR (SELECT COUNT(*) FROM (SELECT 1 FROM InscricaoEvento WHERE id_evento = ?) AS temp) < ?)
+            `;
+            const [resultado] = await conn.execute(queryPago, [id_usuario, id_evento, preco, numeroVagas, numeroVagas, id_evento, numeroVagas]);
+            
+            if (numeroVagas > 0 && resultado.affectedRows === 0) {
+                await conn.rollback();
+                return res.status(403).json({ erro: "Lotação esgotada! Os ingressos para este evento acabaram." });
+            }
         }
         
         await conn.commit();
