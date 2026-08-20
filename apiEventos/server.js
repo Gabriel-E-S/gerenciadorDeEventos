@@ -205,6 +205,56 @@ const schemaEditarAtividade = z.object({
     })
 });
 
+const schemaEditarPerfil = z.object({
+    body: z.object({
+        nome: z.string().min(3, "O nome deve ter pelo menos 3 caracteres."),
+        email: z.string().email("Formato de e-mail inválido."),
+        senhaAntiga: z.string().optional(),
+        senhaNova: z.string()
+            .regex(/[a-z]/, "A senha deve conter pelo menos uma letra minúscula.")
+            .regex(/[A-Z]/, "A senha deve conter pelo menos uma letra maiúscula.")
+            .regex(/[0-9]/, "A senha deve conter pelo menos um número.")
+            .regex(/[^A-Za-z0-9]/, "A senha deve conter pelo menos um caractere especial.")
+            .optional()
+    })
+});
+
+const schemaAddEquipe = z.object({
+    body: z.object({
+        email: z.string().email("Forneça um e-mail válido para convidar o Staff.")
+    })
+});
+
+const schemaInscricao = z.object({
+    body: z.object({
+        id_atividade: z.union([z.string(), z.number()], { required_error: "O ID da atividade é obrigatório." })
+    })
+});
+
+const schemaCheckout = z.object({
+    body: z.object({
+        id_evento: z.union([z.string(), z.number()], { required_error: "O ID do evento é obrigatório para pagamento." })
+    })
+});
+
+const schemaScannerLer = z.object({
+    body: z.object({
+        token_lido: z.string().min(10, "Token inválido ou vazio.")
+    })
+});
+
+const schemaScannerConfirmar = z.object({
+    body: z.object({
+        id_inscricaoAtividade: z.union([z.string(), z.number()], { required_error: "O ID da inscrição é obrigatório." })
+    })
+});
+
+const schemaAlterarPerfil = z.object({
+    body: z.object({
+        novoPerfil: z.enum(["PARTICIPANTE", "ORGANIZADOR", "ADMINISTRADOR"], { required_error: "Perfil inválido." })
+    })
+});
+
 const auditoriaLogger = (req, res, next) => {
     res.on('finish', () => {
         if (['POST', 'PUT', 'DELETE'].includes(req.method)) {
@@ -614,7 +664,7 @@ app.get("/api/organizadores", verificarToken, async (req, res) => {
   }
 });
 
-app.post("/api/eventos/:id/equipe", verificarToken, async (req, res) => {
+app.post("/api/eventos/:id/equipe", verificarToken,validarDados(schemaAddEquipe), async (req, res) => {
   const id_evento = req.params.id;
   const { email } = req.body;
 
@@ -930,7 +980,7 @@ app.get("/api/atividades", async (req, res) => {
   }
 });
 
-app.post('/api/inscricao', verificarToken, async (req, res) => {
+app.post('/api/inscricao', verificarToken, validarDados(schemaInscricao), async (req, res) => {
     const { id_atividade } = req.body;
     const id_usuario = req.usuario.id;
 
@@ -1047,7 +1097,7 @@ app.get("/api/meus-ingressos", verificarToken, async (req, res) => {
   }
 });
 
-app.post("/api/scanner/ler", verificarToken, async (req, res) => {
+app.post("/api/scanner/ler", verificarToken, validarDados(schemaScannerLer), async (req, res) => {
   const { token_lido } = req.body;
   const id_organizador = req.usuario.id;
   const perfil_organizador = req.usuario.perfil;
@@ -1149,7 +1199,7 @@ app.post("/api/scanner/ler", verificarToken, async (req, res) => {
   }
 });
 
-app.post('/api/scanner/confirmar', verificarToken, async (req, res) => {
+app.post('/api/scanner/confirmar', verificarToken, validarDados(schemaScannerConfirmar), async (req, res) => {
     const { id_inscricaoAtividade } = req.body;
     
     const id_organizador = req.usuario.id;
@@ -1513,7 +1563,6 @@ app.get("/api/eventos/:id/estatisticas", verificarToken, async (req, res) => {
   }
 });
 
-// Rota para listar todos os usuários (Apenas Admin)
 app.get("/api/admin/usuarios", verificarToken, async (req, res) => {
   if (req.usuario.perfil !== "ADMINISTRADOR") {
     return res.status(403).json({
@@ -1522,32 +1571,36 @@ app.get("/api/admin/usuarios", verificarToken, async (req, res) => {
   }
 
   try {
-    const query =
-      "SELECT id_usuario, nome, email, cpf, ra, tipoPerfil FROM Usuario ORDER BY nome ASC";
+    const query = "SELECT id_usuario, nome, email, cpf, ra, tipoPerfil FROM Usuario ORDER BY nome ASC";
     const [usuarios] = await db.execute(query);
-    res.status(200).json(usuarios);
+
+    const usuariosMascarados = usuarios.map(u => ({
+        id_usuario: u.id_usuario,
+        nome: u.nome,
+        email: u.email,
+        tipoPerfil: u.tipoPerfil,
+        cpf: u.cpf ? `***.***.***-${u.cpf.slice(-2)}` : null,
+        ra: u.ra ? `***${u.ra.slice(-3)}` : null
+    }));
+
+    res.status(200).json(usuariosMascarados);
+    
   } catch (erro) {
     console.error("Erro ao buscar usuários:", erro);
-    res
-      .status(500)
-      .json({ erro: "Erro interno ao carregar a lista de usuários." });
+    res.status(500).json({ erro: "Erro interno ao carregar a lista de usuários." });
   }
 });
 
 // Rota para alterar o perfil de um usuário (Apenas Admin)
-app.put("/api/admin/usuarios/:id/perfil", verificarToken, async (req, res) => {
+app.put("/api/admin/usuarios/:id/perfil", verificarToken, validarDados(schemaAlterarPerfil), async (req, res) => {
   if (req.usuario.perfil !== "ADMINISTRADOR") {
     return res.status(403).json({
       erro: "Acesso negado. Apenas administradores podem alterar perfis.",
     });
-  }
+  } 
 
   const { novoPerfil } = req.body;
   const id_alvo = req.params.id;
-
-  if (!["PARTICIPANTE", "ORGANIZADOR", "ADMINISTRADOR"].includes(novoPerfil)) {
-    return res.status(400).json({ erro: "Perfil inválido." });
-  }
 
   try {
     if (
@@ -1604,7 +1657,7 @@ app.get(
 // ==========================================
 // CRIAR CHECKOUT PRO 
 // ==========================================
-app.post('/api/pagamentos/checkout-pro', verificarToken, pagamentoLimiter, async (req, res) => {
+app.post('/api/pagamentos/checkout-pro', verificarToken, pagamentoLimiter, validarDados(schemaCheckout), async (req, res) => {
     const { id_evento } = req.body;
     const id_usuario = req.usuario.id;
 
@@ -1782,7 +1835,7 @@ app.get("/api/usuario/perfil", verificarToken, async (req, res) => {
 });
 
 // Atualizar os dados e/ou a foto
-app.put('/api/usuario/perfil', verificarToken, upload.single('fotoPerfil'), validarMagicBytes, async (req, res) => {
+app.put('/api/usuario/perfil', verificarToken, upload.single('fotoPerfil'), validarMagicBytes,validarDados(schemaEditarPerfil), async (req, res) => {
     
     const { nome, email, senhaAntiga, senhaNova } = req.body;
     const id_usuario = req.usuario.id;
