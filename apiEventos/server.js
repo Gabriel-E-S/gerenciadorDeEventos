@@ -4,6 +4,7 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const rateLimit = require('express-rate-limit');
 const { z } = require('zod'); 
+const helmet = require('helmet');
 
 const { MercadoPagoConfig, Payment, Preference } = require("mercadopago");
 const { OAuth2Client } = require('google-auth-library');
@@ -49,12 +50,14 @@ const client = new MercadoPagoConfig({
 const payment = new Payment(client);
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '50kb' }));
+
+app.use(helmet());
 
 const origensPermitidas = [
     'http://localhost:5173', 
-    'https://aki-xjvb.onrender.com/login', 
-    'https://www.aki-xjvb.onrender.com/login' 
+    'https://aki-xjvb.onrender.com',    
+    'https://www.aki-xjvb.onrender.com', 
 ];
 
 const corsOptions = {
@@ -126,7 +129,12 @@ const schemaCadastro = z.object({
     body: z.object({
         nome: z.string().min(3, "O nome deve ter pelo menos 3 caracteres."),
         email: z.string().email("Formato de e-mail inválido."),
-        senha: z.string().min(6, "A senha deve ter pelo menos 6 caracteres."),
+        senha: z.string()
+            .min(8, "A senha deve ter pelo menos 8 caracteres.")
+            .regex(/[a-z]/, "A senha deve conter pelo menos uma letra minúscula.")
+            .regex(/[A-Z]/, "A senha deve conter pelo menos uma letra maiúscula.")
+            .regex(/[0-9]/, "A senha deve conter pelo menos um número.")
+            .regex(/[^A-Za-z0-9]/, "A senha deve conter pelo menos um caractere especial (ex: @, #, $, !)."),
         cpf: z.string().regex(/^\d{11}$/, "O CPF deve conter exatamente 11 números, sem pontos ou traços."),
         termos_aceitos: z.literal("true", { errorMap: () => ({ message: "Você precisa aceitar os termos de uso." }) }),
         ra: z.string().optional().nullable(),
@@ -151,7 +159,12 @@ const schemaNovoOrganizador = z.object({
     body: z.object({
         nome: z.string().min(3, "O nome é muito curto."),
         email: z.string().email("Formato de e-mail inválido."),
-        senha: z.string().min(6, "A senha deve ter pelo menos 6 caracteres."),
+        senha: z.string()
+            .min(8, "A senha deve ter pelo menos 8 caracteres.")
+            .regex(/[a-z]/, "A senha deve conter pelo menos uma letra minúscula.")
+            .regex(/[A-Z]/, "A senha deve conter pelo menos uma letra maiúscula.")
+            .regex(/[0-9]/, "A senha deve conter pelo menos um número.")
+            .regex(/[^A-Za-z0-9]/, "A senha deve conter pelo menos um caractere especial (ex: @, #, $, !)."),
         documento: z.string().optional().nullable()
     })
 });
@@ -603,8 +616,23 @@ app.post("/api/eventos/:id/equipe", verificarToken, async (req, res) => {
 
 app.get("/api/eventos", async (req, res) => {
   try {
-    const query = "SELECT * FROM Evento ORDER BY dataInicio ASC";
+    const query = `
+      SELECT 
+          id_evento, 
+          id_usuario_gerente, 
+          titulo, 
+          descricao, 
+          dataInicio, 
+          dataFim, 
+          local, 
+          numeroVagas, 
+          url_imagem, 
+          preco 
+      FROM Evento 
+      ORDER BY dataInicio ASC
+    `;
     const [eventos] = await db.execute(query);
+    
     res.status(200).json(eventos);
   } catch (erro) {
     console.error("Erro ao buscar eventos:", erro);
@@ -615,7 +643,17 @@ app.get("/api/eventos", async (req, res) => {
 app.get("/api/eventos/:id", async (req, res) => {
   try {
     const query = `
-            SELECT e.*, 
+            SELECT 
+                e.id_evento, 
+                e.id_usuario_gerente, 
+                e.titulo, 
+                e.descricao, 
+                e.dataInicio, 
+                e.dataFim, 
+                e.local, 
+                e.numeroVagas, 
+                e.url_imagem, 
+                e.preco,
                    (SELECT COUNT(DISTINCT ia.id_usuario) 
                     FROM InscricaoAtividade ia 
                     JOIN Atividade a ON ia.id_atividade = a.id_atividade 
@@ -1377,10 +1415,19 @@ app.post("/api/admin/organizadores", verificarToken, validarDados(schemaNovoOrga
 });
 
 // Rota para buscar estatísticas gerais de um evento usando RegistroPresenca
-app.get("/api/eventos/:id/estatisticas", async (req, res) => {
-  try {
-    const id_evento = req.params.id;
+app.get("/api/eventos/:id/estatisticas", verificarToken, async (req, res) => {
+  const id_evento = req.params.id;
 
+  try {
+      const autorizado = await verificarDonoOuAdmin(req.usuario.id, req.usuario.perfil, id_evento);
+      if (!autorizado) {
+          return res.status(403).json({ erro: "Acesso negado. Apenas o organizador do evento pode visualizar as estatísticas de negócio." });
+      }
+  } catch (erro) {
+      return res.status(500).json({ erro: "Erro ao validar permissões de acesso às estatísticas." });
+  }
+
+  try {
     const queryInscritos = `
             SELECT COUNT(*) AS totalInscritos 
             FROM InscricaoAtividade ia
@@ -1404,7 +1451,7 @@ app.get("/api/eventos/:id/estatisticas", async (req, res) => {
 
     const inscritos = resInscritos.totalInscritos || 0;
     const checkins = resCheckins.totalCheckins || 0;
-    const numeroVagas = resEvento.numeroVagas;
+    const numeroVagas = resEvento?.numeroVagas || 0; 
 
     const taxaComparecimento =
       inscritos > 0 ? Math.round((checkins / inscritos) * 100) : 0;
