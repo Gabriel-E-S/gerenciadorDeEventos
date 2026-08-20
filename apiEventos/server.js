@@ -5,6 +5,7 @@ const jwt = require("jsonwebtoken");
 const rateLimit = require('express-rate-limit');
 const { z } = require('zod'); 
 const helmet = require('helmet');
+const winston = require('winston');
 
 const { MercadoPagoConfig, Payment, Preference } = require("mercadopago");
 const { OAuth2Client } = require('google-auth-library');
@@ -37,7 +38,18 @@ const apiGeralLimiter = rateLimit({
     legacyHeaders: false,
 });
 
-
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.json(),
+  transports: [
+      // Salva os logs em um arquivo físico no HD da sua VM
+      new winston.transports.File({ filename: 'auditoria.log' }),
+      // E continua imprimindo no terminal (bom para quando usar ferramentas como PM2)
+      new winston.transports.Console({
+          format: winston.format.simple(),
+      })
+  ],
+});
 
 const db = require("./db");
 
@@ -76,6 +88,7 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.use('/api/', apiGeralLimiter);
+app.use(auditoriaLogger);
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -191,6 +204,32 @@ const schemaEditarAtividade = z.object({
         capacidadeMaxima: z.union([z.string(), z.number()]).optional().nullable()
     })
 });
+
+const auditoriaLogger = (req, res, next) => {
+    res.on('finish', () => {
+        if (['POST', 'PUT', 'DELETE'].includes(req.method)) {
+            
+            const usuarioId = req.usuario ? req.usuario.id : 'ANÔNIMO_OU_FALHA';
+            
+            const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+
+            const log = {
+                timestamp: new Date().toISOString(),
+                nivel: res.statusCode >= 400 ? 'ALERTA_SEGURANCA' : 'AUDITORIA',
+                usuario_id: usuarioId,
+                metodo: req.method,
+                rota: req.originalUrl,
+                status_http: res.statusCode,
+                ip: ip
+            };
+
+            console.log(JSON.stringify(log));
+            // logger.info(log); VM
+        }
+    });
+    
+    next();
+};
 
 const validarMagicBytes = (req, res, next) => {
     
