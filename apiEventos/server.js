@@ -151,7 +151,7 @@ const schemaCadastro = z.object({
         cpf: z.string().regex(/^\d{11}$/, "O CPF deve conter exatamente 11 números, sem pontos ou traços."),
         termos_aceitos: z.literal("true", { errorMap: () => ({ message: "Você precisa aceitar os termos de uso." }) }),
         ra: z.string().optional().nullable(),
-        google_id: z.string().optional().nullable()
+        token_google: z.string().optional().nullable()
     })
 });
 
@@ -404,9 +404,30 @@ app.get("/api/status", async (req, res) => {
   }
 });
 
-// Rota de cadastro.
+// Rota de cadastro
 app.post("/api/cadastro", upload.single("fotoPerfil"), validarMagicBytes, loginLimiter, validarDados(schemaCadastro), async (req, res) => {
-  const { nome, email, senha, cpf, ra, termos_aceitos, google_id } = req.body;
+  const { nome, email, senha, cpf, ra, termos_aceitos, token_google } = req.body;
+
+  let google_id_verificado = null;
+
+  if (token_google) {
+      try {
+          const ticket = await googleClient.verifyIdToken({
+              idToken: token_google,
+              audience: process.env.GOOGLE_CLIENT_ID,
+          });
+          
+          const payload = ticket.getPayload();
+          google_id_verificado = payload.sub; 
+          
+          if (payload.email !== email) {
+              return res.status(400).json({ erro: "Fraude bloqueada: O e-mail fornecido não corresponde ao e-mail autorizado da conta Google." });
+          }
+      } catch (erro) {
+          console.error("Erro ao validar token Google no cadastro:", erro);
+          return res.status(401).json({ erro: "A assinatura do Google fornecida é inválida ou expirou." });
+      }
+  }
 
   try {
     const [usuariosExistentes] = await db.execute(
@@ -455,7 +476,7 @@ app.post("/api/cadastro", upload.single("fotoPerfil"), validarMagicBytes, loginL
       ra || null,
       fotoUrl,
       aceitou,
-      google_id || null
+      google_id_verificado || null 
     ]);
 
     res.status(201).json({ mensagem: "Conta criada com sucesso!" });
